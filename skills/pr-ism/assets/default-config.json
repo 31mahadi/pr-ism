@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "output": {
+    "format": "html",
+    "dir": ".pr-ism/reviews",
+    "filename": "{repo}-pr-{id}-{date}.html",
+    "open": true
+  },
+  "report": {
+    "sections": [
+      "summary",
+      "risk_overview",
+      "table",
+      "findings",
+      "test_gaps",
+      "questions"
+    ],
+    "columns": [
+      "file",
+      "function",
+      "change_type",
+      "logical",
+      "what",
+      "verdict",
+      "severity"
+    ],
+    "group_by": "file",
+    "sort": "severity_desc",
+    "language": "en",
+    "tone": "concise",
+    "show_diff_snippets": true
+  },
+  "links": {
+    "style": "auto",
+    "editor": "vscode",
+    "template": "",
+    "review_template": ""
+  },
+  "review": {
+    "depth": "standard",
+    "focus": [
+      "correctness",
+      "security",
+      "performance",
+      "tests",
+      "readability"
+    ],
+    "ignore": [
+      "**/*.lock",
+      "**/package-lock.json",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml",
+      "**/go.sum",
+      "**/dist/**",
+      "**/build/**",
+      "**/vendor/**",
+      "**/node_modules/**",
+      "**/*.min.js",
+      "**/*.min.css",
+      "**/*.snap",
+      "**/generated/**",
+      "**/*.pb.go",
+      "**/__snapshots__/**"
+    ],
+    "red_paths": [
+      "**/auth/**",
+      "**/authz/**",
+      "**/billing/**",
+      "**/payment*/**",
+      "**/migrations/**",
+      "**/crypto/**",
+      "**/secrets/**"
+    ],
+    "require_tests_for": [
+      "src/**",
+      "internal/**",
+      "pkg/**",
+      "app/**",
+      "lib/**"
+    ],
+    "max_files_inline": 60,
+    "read_source_context": true
+  },
+  "severity_scale": [
+    "info",
+    "low",
+    "medium",
+    "high",
+    "critical"
+  ],
+  "verdicts": [
+    "lgtm",
+    "nit",
+    "question",
+    "needs-changes",
+    "blocking"
+  ]
+}
