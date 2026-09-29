@@ -41,8 +41,18 @@ def check_frontmatter():
         "assets/default-config.json",
     ):
         assert (SKILL / f).exists(), f"missing {f}"
-    json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
-    json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    skill_v = re.search(r'^\s*version:\s*"([^"]+)"', fm, re.M).group(1)
+    versions = {
+        "SKILL.md": skill_v,
+        "plugin.json": plugin["version"],
+        "marketplace.json": market["plugins"][0]["version"],
+    }
+    assert len(set(versions.values())) == 1, f"versions out of sync: {versions}"
+    assert re.search(rf"^## {re.escape(skill_v)}\b", (ROOT / "CHANGELOG.md").read_text(), re.M), (
+        f"CHANGELOG.md has no section for {skill_v}"
+    )
     print("ok  frontmatter + manifests")
 
 

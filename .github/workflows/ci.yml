@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.9"
       - name: Lint
-        run: pipx run ruff check skills tests && pipx run ruff format --check skills tests
+        run: pipx run ruff check skills tests scripts && pipx run ruff format --check skills tests scripts
       - run: python3 tests/smoke_test.py
 
   release:
@@ -25,9 +25,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Check tag matches the plugin version
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != plugin.json $v"; exit 1; }
+      - name: Release notes from CHANGELOG.md
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" > notes.md <<'PY'
+          import re, sys
+          v = re.escape(sys.argv[1])
+          m = re.search(rf"^## {v}\b.*?$(.*?)(?=^## |\Z)", open("CHANGELOG.md").read(), re.M | re.S)
+          print(m.group(1).strip() if m else "See CHANGELOG.md")
+          PY
       - name: Build skill zip
         run: cd skills && zip -r ../pr-ism.skill.zip pr-ism -x '*/__pycache__/*'
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" pr-ism.skill.zip --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md"
+        run: gh release create "$GITHUB_REF_NAME" pr-ism.skill.zip --title "$GITHUB_REF_NAME" --notes-file notes.md

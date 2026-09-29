@@ -47,8 +47,9 @@ Running it again on the same PR after new commits reviews only what changed sinc
 3. **Detect**: Claude reads each change and writes one row per function, with what changed, the change type, a green/amber/red rating, a verdict and a severity.
    In Claude Code with pr-review-toolkit installed, its agents run in parallel at the same time: code-reviewer always, and silent-failure-hunter, pr-test-analyzer, type-design-analyzer or comment-analyzer when the diff touches their area.
 4. **Merge**: agent findings are attached to the row whose function contains them. Duplicates and low-confidence findings are dropped, and a row's severity goes up when a finding is worse. Each finding keeps its source.
-5. **Render**: the result is one self-contained HTML report. When findings come from more than one source, each is labelled and you can filter by source.
-6. **Post** (optional): the review goes back to the PR as inline comments.
+5. **Render**: one self-contained HTML report. Rows are ordered into the review path, each station gets a time estimate, and findings from more than one source are labelled and filterable.
+6. **Decide**: tick rows as reviewed and mark findings Agree / Not an issue / Fixed in the report, or `walk` through the path in chat. Marks stay in your browser per head commit.
+7. **Post** (optional): the review goes back to the PR as inline comments. Dismissed findings are left out and fixed ones listed as addressed.
 
 `review.engine` picks the detector: `auto` (default) uses the toolkit when it is available and pr-ism's own rubric otherwise.
 `prism` always uses the rubric, and `toolkit` requires the plugin.
@@ -92,10 +93,21 @@ Check that it's active: `/pr-review-toolkit:review-pr` should appear in the slas
 | The report says the rubric was used even though the toolkit is installed | The session started before the install. Open a new session or run `/reload-plugins`. To force the toolkit, run `/pr-ism:pr-ism config set review.engine toolkit`; the review then stops with a clear error if the toolkit is unavailable. |
 | Changes to a local checkout don't show up | The plugin runs from its install cache, not your checkout. Test local changes with `claude --plugin-dir /path/to/pr-ism`. |
 
+## Follow up in chat
+
+After a review, Claude prints a short card: verdict and reason, the shape of the PR, where to start, the top findings as clickable `file:line` links, and what you can say next.
+
+| Say | What happens |
+|---|---|
+| `walk` | A guided pass, one station of the review path at a time. Say `next`, `back`, `skip`, `show r3`, `agree f1`, `dismiss f2`, `done`. |
+| `show 3` | Row or finding 3's diff with links, without reviewing again |
+| `fix 1` | The smallest change that resolves finding 1, as a diff. Applied only after you say yes, and never committed. |
+| `post` | Posts to the PR. Paste the JSON from the report's **Copy decisions** button first to post only what you agreed with. |
+
 ## Configure
 
 ```
-/pr-ism config set report.group_by severity
+/pr-ism config set report.group_by file        # back to grouping by file (default: path)
 /pr-ism config set review.red_paths "**/billing/**" --global
 /pr-ism config reset
 /pr-ism config set review.engine prism     # rubric only, even with the toolkit installed
@@ -111,6 +123,8 @@ Review files are written to `<repo>/.pr-ism/`. Add `.pr-ism/work/` and `.pr-ism/
 - **Logical** (green / amber / red): how far-reaching the change is, not whether it is correct.
 - **Severity**: the worst problem found in a row.
 - **Verdict**: `lgtm`, `nit`, `question`, `needs-changes` or `blocking`.
+- **Review path**: ① load-bearing (the change the rest depends on) ② blockers ③ red paths judged ok ④ tests ⑤ everything else.
+- **Time**: estimated at 400 lines an hour, the rate past which reviewers start missing defects. Green rows count as skimmed.
 
 ## Limits
 
@@ -121,18 +135,24 @@ Review files are written to `<repo>/.pr-ism/`. Add `.pr-ism/work/` and `.pr-ism/
 ## Development
 
 ```
-python3 tests/smoke_test.py            # must print "all good"
-uvx ruff check skills tests            # lint (config in pyproject.toml)
-uvx ruff format skills tests           # format
+python3 tests/smoke_test.py                    # must print "all good"
+uvx ruff check skills tests scripts            # lint (config in pyproject.toml)
+uvx ruff format skills tests scripts           # format
+claude --plugin-dir .                          # try your checkout in Claude Code
 ```
 
-To release:
+### Releasing
 
-1. Bump the version in `skills/pr-ism/SKILL.md`, `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
-2. Add an entry to `CHANGELOG.md`.
-3. Tag the commit: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+Write the `## X.Y.Z` section in `CHANGELOG.md` and commit it with your changes, then:
 
-CI then builds `pr-ism.skill.zip` and attaches it to the release.
+```
+python3 scripts/release.py minor               # dry run: checks and shows what would change
+python3 scripts/release.py minor --push        # bump, test, commit, tag, push
+```
+
+`patch`, `minor`, `major` or an exact `X.Y.Z` all work. The script refuses to run off `main`, with uncommitted changes, behind `origin`, or on an existing tag. If the changelog section is missing it drafts one from the commits since the last tag and stops so you can edit it. It bumps all three version fields, runs lint and the smoke test (reverting the bump if either fails), then commits, tags and pushes.
+
+CI checks that the tag matches `plugin.json`, builds `pr-ism.skill.zip`, and publishes the GitHub release with the changelog section as its notes. The smoke test fails if the three versions drift apart or the current version has no changelog entry, so a half-done bump can't be merged.
 
 ## License
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1 — 2026-09-29
+- README: the review path, decide step, chat follow-up modes (`walk`, `show`, `fix`, `post`) and time estimates.
+- One-command releases: `python3 scripts/release.py patch|minor|major|X.Y.Z [--push]` checks the repo, bumps all three versions, runs lint and tests, then commits, tags and pushes.
+- CI refuses a tag that doesn't match `plugin.json` and uses the changelog section as the release notes; the smoke test fails when versions drift or the current version has no changelog entry.
 ## 1.7.0 — 2026-09-29
 - Report redesigned around how expert reviewers read a PR (see `docs/report-v2-design.md`): a decide strip (verdict, reason, "start here", worst finding), a shape strip of directory tiles sized by lines and coloured by risk, and the table grouped into a **review path** — load-bearing → blockers → red paths judged ok → tests → everything else — with a time estimate per station and a reviewed tick per row. `report.group_by` gains `path` and it is the default.
 - Rows carry a `shape` cell (diff bar, +/−, findings badge, tests tick); expanded rows show attached findings first, then the diff with a line-number gutter. Findings are a table with Agree / Not an issue / Fixed; **Copy decisions** exports them. Reviewed marks and decisions persist in the browser per head commit.
