@@ -1,10 +1,10 @@
 ---
 name: pr-ism
 description: Reviews a pull request or merge request end to end and delivers an interactive HTML report — a summary plus a navigable, function-level table (file link, function, change type, green/amber/red logical-change rating, what changed, verdict, severity/impact), findings, test gaps and questions. Use this whenever the user asks to review, audit, summarise, explain, risk-assess or "check" a PR, MR, diff, patch, branch or commit range — including when they only paste a GitHub/GitLab PR URL, a `#123`, a branch name, or say "look at this PR before I merge". Also handles `config` to customise the output (columns, sections, grouping, link style, severity labels, review depth, ignore and red-path globs). Invoke with `/pr-ism PR-REF` or `/pr-ism config`.
-license: MIT
+license: Proprietary. See LICENSE
 compatibility: Needs python3 (3.9+) and git. GitHub PRs use the gh CLI, else the REST API (GITHUB_TOKEN for private), else a git fetch of refs/pull/N/head from inside the clone; GitLab MRs use glab or refs/merge-requests/N/head. Other providers work via a local branch, commit range or patch file. The HTML report is self-contained and works offline.
 metadata:
-  author: Backend Team 1
+  author: Mahadi Hassan <01.mahadi@gmail.com>
   version: "1.3.0"
 ---
 

@@ -2,7 +2,7 @@
   "name": "pr-ism",
   "version": "1.3.0",
   "description": "Function-level pull request review for Claude, delivered as an interactive HTML report",
-  "author": { "name": "Mahadi" },
+  "author": { "name": "Mahadi Hassan", "email": "01.mahadi@gmail.com" },
   "repository": "https://github.com/31mahadi/pr-ism",
-  "license": "MIT"
+  "license": "UNLICENSED"
 }

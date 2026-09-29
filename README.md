@@ -114,4 +114,4 @@ in `references/`. Bump the version in `SKILL.md` frontmatter, `plugin.json`, `ma
 
 ## License
 
-MIT
+Proprietary. Copyright © 2026 Mahadi Hassan. All rights reserved. See [LICENSE](LICENSE).

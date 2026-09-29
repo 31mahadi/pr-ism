@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.3.0 — 2026-09-29
+- License changed from MIT to proprietary (all rights reserved, Mahadi Hassan).
 - Renamed from prism to **pr-ism**: command is now `/pr-ism`, skill folder `skills/pr-ism`, plugin `pr-ism@pr-ism`.
 - Working and config directories moved from `.prism/` to `.pr-ism/` (project) and `~/.pr-ism/` (global); env var `PRISM_CONFIG` is now `PR_ISM_CONFIG`; `$XDG_CONFIG_HOME/pr-ism/`.
 

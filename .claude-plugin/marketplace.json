@@ -1,6 +1,6 @@
 {
   "name": "pr-ism",
-  "owner": { "name": "Mahadi" },
+  "owner": { "name": "Mahadi Hassan", "email": "01.mahadi@gmail.com" },
   "plugins": [
     {
       "name": "pr-ism",
