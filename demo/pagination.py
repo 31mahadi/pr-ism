@@ -7,7 +7,7 @@ def fetch_all(client, page_size=50):
         if not batch:
             break
         items.extend(batch)
-        if len(batch) < page_size - 1:
+        if len(batch) < page_size:
             break
         page += 1
     return items
