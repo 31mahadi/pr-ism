@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.1 — 2026-09-29
+- Code formatted and linted with ruff (no behaviour change); fuller `.gitignore`; lint step in CI.
+
 ## 1.5.0 — 2026-09-29
 - Licensed under MIT and prepared for public release; README drops the private-access notes and adds the `npx skills add` install.
 

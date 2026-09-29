@@ -6,7 +6,7 @@
       "name": "pr-ism",
       "source": "./",
       "description": "Function-level pull request review for Claude, delivered as an interactive HTML report",
-      "version": "1.5.0"
+      "version": "1.5.1"
     }
   ]
 }
