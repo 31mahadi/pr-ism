@@ -2,6 +2,9 @@
 
 Function-level pull request review for Claude, delivered as an interactive HTML report.
 
+> **Private and proprietary.** This repository is private; installing requires access to
+> `31mahadi/pr-ism`. Do not redistribute — see [License](#license).
+
 ```
 /pr-ism https://github.com/acme/api/pull/482
 /pr-ism #482                 # inside the repo clone
@@ -24,6 +27,8 @@ Markdown output is available too (`output.format`).
 ## Install
 
 Pick whichever surface you use. All of them read the same `skills/pr-ism` folder.
+Because the repo is private, the git-based options need you to be signed in with access
+(`gh auth login`, or an SSH key / `GITHUB_TOKEN` git can use).
 
 **Claude Code — plugin marketplace (versioned, updatable)**
 ```
@@ -41,7 +46,7 @@ Invoke as `/pr-ism <ref>`.
 
 **Manual** — copy `skills/pr-ism` into `.claude/skills/` (project) or `~/.claude/skills/` (user).
 
-**claude.ai / Claude Desktop** — download `pr-ism.skill.zip` from the latest release and upload it under *Settings → Skills*. Then just say "review this PR" with a link or paste the diff.
+**claude.ai / Claude Desktop** — download `pr-ism.skill.zip` from the [latest release](https://github.com/31mahadi/pr-ism/releases/latest) (or `gh release download -R 31mahadi/pr-ism -p pr-ism.skill.zip`) and upload it under *Settings → Skills*. Then just say "review this PR" with a link or paste the diff.
 
 **Claude API** — upload the same folder via the Skills API.
 
@@ -101,17 +106,24 @@ blocking.
 
 ```
 .claude-plugin/          plugin.json + marketplace.json (Claude Code)
-skills/pr-ism/          the skill — SKILL.md, scripts/, references/, assets/
-tests/smoke_test.py      end-to-end check run by CI
-.github/workflows/       validate on push; attach pr-ism.skill.zip to tagged releases
+skills/pr-ism/           the skill — SKILL.md, scripts/, references/, assets/
+tests/smoke_test.py      end-to-end check (also run by CI)
+.github/workflows/       test on push; build pr-ism.skill.zip and attach it to v* tag releases
 ```
 
-## Contributing
+## Development
 
-Run `python3 tests/smoke_test.py` before opening a PR. Keep `SKILL.md` under 500 lines — put detail
-in `references/`. Bump the version in `SKILL.md` frontmatter, `plugin.json`, `marketplace.json` and
-`CHANGELOG.md` together and tag `vX.Y.Z` to cut a release.
+- Test: `python3 tests/smoke_test.py` — must print `all good`.
+- Keep `SKILL.md` under 500 lines; put detail in `references/`.
+- Release: bump the version in `SKILL.md` frontmatter, `.claude-plugin/plugin.json`,
+  `.claude-plugin/marketplace.json` and `CHANGELOG.md` together, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+  CI builds and attaches the zip. If Actions can't run, build and publish it by hand:
+  ```
+  (cd skills && zip -qr ../pr-ism.skill.zip pr-ism -x '*/__pycache__/*')
+  gh release create vX.Y.Z pr-ism.skill.zip --title vX.Y.Z --notes "See CHANGELOG.md"
+  ```
 
 ## License
 
-Proprietary. Copyright © 2026 Mahadi Hassan. All rights reserved. See [LICENSE](LICENSE).
+Proprietary. Copyright © 2026 Mahadi Hassan (01.mahadi@gmail.com). All rights reserved.
+No use, copying, modification or distribution without prior written permission. See [LICENSE](LICENSE).
