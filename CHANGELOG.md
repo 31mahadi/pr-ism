@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0 — 2026-09-29
+- Optional detection by Anthropic's pr-review-toolkit agents: `review.engine` (auto | prism | toolkit, default auto) and `review.min_agent_confidence` (default 80). In Claude Code with the plugin installed, pr-ism spawns code-reviewer plus whichever of silent-failure-hunter, pr-test-analyzer, type-design-analyzer and comment-analyzer fit the diff; rows, RAG and verdicts stay pr-ism's. Without the plugin (and always on claude.ai) the rubric works as before.
+- `merge_findings.py`: attaches agent findings to rows by segment range, dedupes, drops low-confidence findings, maps severities, raises row severity and verdict, turns test-analyzer findings into test gaps.
+- Findings carry `source` (`prism` or `toolkit:<agent>`). The report labels sources and adds a source filter when there is more than one; findings appear inside their expanded row; posted comments name the agent.
+- Row ids no longer collide when rows are carried over from a previous review.
+
 ## 1.5.1 — 2026-09-29
 - Code formatted and linted with ruff (no behaviour change); fuller `.gitignore`; lint step in CI.
 

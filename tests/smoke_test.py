@@ -35,6 +35,7 @@ def check_frontmatter():
         "references/review-rubric.md",
         "references/review-schema.md",
         "references/config-reference.md",
+        "references/toolkit-engine.md",
         "assets/report-template.html",
         "assets/default-config.json",
     ):
@@ -200,6 +201,7 @@ def check_pipeline():
         assert payload["event"] == "COMMENT" and payload["commit_id"] == "abc" and "off-diff" in payload["body"], (
             payload
         )
+        check_merge(d, w, eff, review)
         # repeat review: second fetch after a new commit writes pr.since.diff with only the new change
         (w / "work" / "x" / "review.json").write_text(json.dumps(review))
         sh(["git", "checkout", "-q", "feat"], d)
@@ -215,6 +217,89 @@ def check_pipeline():
         same = sh([sys.executable, S / "fetch_pr.py", "feat", "--out", w / "work" / "x"], d).stdout
         assert "unchanged since the last review" in same and not (w / "work" / "x" / "pr.since.diff").exists(), same
         print("ok  pipeline:", out.strip().splitlines()[-1])
+
+
+def check_merge(d, w, eff, review):
+    """merge_findings.py with a fake agent-findings.jsonl; no model involved."""
+    x = w / "work" / "x"
+    changes = x / "changes.json"
+
+    def merge(agents_lines, name):
+        (w / f"{name}.jsonl").write_text("\n".join(agents_lines) + "\n")
+        src = w / f"{name}-review.json"
+        src.write_text(json.dumps(dict(review, findings=[{"severity": "low", "title": "g could be inlined"}])))
+        cmd = [sys.executable, S / "merge_findings.py", src, "--changes", changes, "--agents", w / f"{name}.jsonl"]
+        out = sh([*cmd, "--config", eff], d).stdout
+        return json.loads(src.read_text()), out, cmd
+
+    # prism-only: an empty agents file changes nothing but tags findings with source
+    merged, out, _ = merge([], "none")
+    assert merged["rows"] == [dict(r, id=f"r{i + 1}") for i, r in enumerate(review["rows"])], merged["rows"]
+    assert [f["source"] for f in merged["findings"]] == ["prism"], merged["findings"]
+
+    def fnd(**kw):
+        return json.dumps({"file": "src/a.py", "detail": "d", "suggestion": "s", **kw})
+
+    agents = [
+        fnd(agent="code-reviewer", line=3, severity="high", title="None input silently returns 0", confidence=92),
+        fnd(
+            agent="silent-failure-hunter",
+            line=4,
+            severity="medium",
+            title="None input silently returns zero",
+            confidence=85,
+        ),
+        fnd(agent="code-reviewer", line=999, severity="medium", title="Module docstring is stale", confidence=90),
+        fnd(
+            agent="type-design-analyzer", line=6, severity="high", title="g should return a typed value", confidence=50
+        ),
+        fnd(agent="pr-test-analyzer", line=2, severity="important", title="No test for the None branch", confidence=95),
+        "this is not json",
+    ]
+    merged, out, cmd = merge(agents, "agents")
+    rows = {r["function"]: r for r in merged["rows"]}
+    by_title = {f["title"]: f for f in merged["findings"]}
+    hit = by_title["None input silently returns 0"]
+    assert hit["source"] == "toolkit:code-reviewer" and hit["row_ids"] == [rows["f"]["id"]], hit
+    assert hit["also_found_by"] == ["toolkit:silent-failure-hunter"], hit  # the duplicate folded in
+    assert "None input silently returns zero" not in by_title
+    assert rows["f"]["severity"] == "high" and rows["f"]["verdict"] == "needs-changes", rows["f"]  # raised
+    assert rows["g"]["severity"] == "low" and rows["g"]["verdict"] == "nit", rows["g"]  # untouched
+    stray = by_title["Module docstring is stale"]
+    assert "row_ids" not in stray, stray  # lands in no segment: stays top-level
+    assert "g should return a typed value" not in by_title  # below confidence 80
+    gap = merged["test_gaps"][0]
+    assert gap["source"] == "toolkit:pr-test-analyzer" and gap["function"] == "f", gap
+    assert "malformed" in out and "rows raised: 1" in out, out
+    # rerunning the merge on its own output adds nothing
+    sh([*cmd, "--config", eff], d)
+    rerun = json.loads(Path(cmd[2]).read_text())
+    assert rerun["findings"] == merged["findings"], (rerun["findings"], merged["findings"])
+    # renderer accepts the sources and labels them
+    sh(
+        [
+            sys.executable,
+            S / "render_report.py",
+            cmd[2],
+            "--changes",
+            changes,
+            "--config",
+            eff,
+            "--out",
+            w / "merged.html",
+            "--format",
+            "html",
+            "--no-open",
+        ],
+        d,
+    )
+    html = (w / "merged.html").read_text()
+    assert "toolkit:code-reviewer" in html and 'id="src"' in html
+    bad = dict(merged, findings=[dict(hit, source="gpt")])
+    (w / "badsrc.json").write_text(json.dumps(bad))
+    r = sh([sys.executable, S / "render_report.py", w / "badsrc.json", "--validate-only"], d, check=False)
+    assert r.returncode == 1 and "source" in r.stdout, r.stdout
+    print("ok  merge:", out.strip().splitlines()[0])
 
 
 if __name__ == "__main__":

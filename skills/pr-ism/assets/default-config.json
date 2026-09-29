@@ -37,6 +37,8 @@
     "review_template": ""
   },
   "review": {
+    "engine": "auto",
+    "min_agent_confidence": 80,
     "depth": "standard",
     "focus": [
       "correctness",

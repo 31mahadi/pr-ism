@@ -65,11 +65,14 @@ def collect(review: dict, changes: dict, cfg: dict, min_sev: str) -> tuple[list[
     for f in review.get("findings") or []:
         if rank.get(f["severity"], 0) < floor:
             continue
-        body = f"**{f['severity']}: {f['title']}**\n\n{f.get('detail', '')}".strip()
+        src = f" _({f['source']})_" if str(f.get("source", "")).startswith("toolkit:") else ""
+        body = f"**{f['severity']}: {f['title']}**{src}\n\n{f.get('detail', '')}".strip()
         if f.get("suggestion"):
             body += f"\n\n_Suggestion:_ {f['suggestion']}"
         loc = f" (`{f['file']}{':' + str(f['line']) if f.get('line') else ''}`)" if f.get("file") else ""
-        place(f.get("file"), f.get("line"), body, f"- **{f['severity']}**: {f['title']}{loc}: {f.get('detail', '')}")
+        place(
+            f.get("file"), f.get("line"), body, f"- **{f['severity']}**: {f['title']}{loc}{src}: {f.get('detail', '')}"
+        )
     for r in review["rows"]:
         if r["verdict"] not in ROW_VERDICTS or rank.get(r["severity"], 0) < floor:
             continue

@@ -89,6 +89,9 @@ def validate(review: dict, cfg: dict) -> list[str]:
     for i, f in enumerate(review.get("findings") or []):
         if not f.get("title") or f.get("severity") not in sev:
             errs.append(f"findings[{i}]: needs title and a severity from {cfg['severity_scale']}")
+        src = f.get("source")
+        if src is not None and not (src == "prism" or str(src).startswith("toolkit:")):
+            errs.append(f"findings[{i}]: source must be 'prism' or 'toolkit:<agent>' (got {src!r})")
     return errs
 
 
@@ -103,8 +106,17 @@ def fill(review: dict, changes: dict | None, cfg: dict) -> dict:
     by_path = {f["path"]: f for f in (changes or {}).get("files", [])}
     from parse_diff import build_link  # noqa: WPS433
 
-    for i, r in enumerate(review["rows"]):
-        r.setdefault("id", f"r{i + 1}")
+    rows = review["rows"]
+    taken = {r["id"] for r in rows if r.get("id")}
+    n = 0
+    for r in rows:
+        if not r.get("id"):
+            n += 1
+            while f"r{n}" in taken:
+                n += 1
+            r["id"] = f"r{n}"
+            taken.add(r["id"])
+    for r in rows:
         for k in ("line_start", "line_end", "additions", "deletions"):
             if isinstance(r.get(k), str) and r[k].isdigit():
                 r[k] = int(r[k])
@@ -277,7 +289,7 @@ def to_markdown(review: dict, cfg: dict) -> str:
         for f in review["findings"]:
             loc = f" (`{f['file']}{':' + str(f['line']) if f.get('line') else ''}`)" if f.get("file") else ""
             out += [
-                f"- **{f['severity']}** — {f['title']}{loc}: {f.get('detail', '')}"
+                f"- **{f['severity']}** — {f['title']}{loc}{source_note(f)}: {f.get('detail', '')}"
                 + (f" _Suggestion: {f['suggestion']}_" if f.get("suggestion") else "")
             ]
     if review.get("test_gaps"):
@@ -290,6 +302,12 @@ def to_markdown(review: dict, cfg: dict) -> str:
             f"- {q if isinstance(q, str) else q.get('text')}" for q in review["questions"]
         ]
     return "\n".join(out) + "\n"
+
+
+def source_note(f: dict) -> str:
+    """' · toolkit:agent' for agent findings; nothing for prism's own."""
+    srcs = [f.get("source") or "prism", *(f.get("also_found_by") or [])]
+    return "" if srcs == ["prism"] else " · _" + ", ".join(srcs) + "_"
 
 
 def output_path(review: dict, cfg: dict, ext: str) -> Path:

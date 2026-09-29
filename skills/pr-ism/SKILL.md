@@ -2,10 +2,10 @@
 name: pr-ism
 description: Reviews a pull request or merge request end to end and delivers an interactive HTML report — a summary plus a navigable, function-level table (file link, function, change type, green/amber/red logical-change rating, what changed, verdict, severity/impact), findings, test gaps and questions. Use this whenever the user asks to review, audit, summarise, explain, risk-assess or "check" a PR, MR, diff, patch, branch or commit range — including when they only paste a GitHub/GitLab PR URL, a `#123`, a branch name, or say "look at this PR before I merge". Can post the review back to the PR as comments and re-review only new commits. Also handles `config` to customise the output (columns, sections, grouping, link style, severity labels, review depth, ignore and red-path globs). Invoke with `/pr-ism PR-REF` or `/pr-ism config`.
 license: MIT
-compatibility: Needs python3 (3.9+) and git. GitHub PRs use the gh CLI, else the REST API (GITHUB_TOKEN for private), else a git fetch of refs/pull/N/head from inside the clone; GitLab MRs use glab or refs/merge-requests/N/head. Other providers work via a local branch, commit range or patch file. The HTML report is self-contained and works offline.
+compatibility: Needs python3 (3.9+) and git. GitHub PRs use the gh CLI, else the REST API (GITHUB_TOKEN for private), else a git fetch of refs/pull/N/head from inside the clone; GitLab MRs use glab or refs/merge-requests/N/head. Other providers work via a local branch, commit range or patch file. The HTML report is self-contained and works offline. In Claude Code, optionally uses the pr-review-toolkit plugin's agents for detection (review.engine).
 metadata:
   author: Mahadi Hassan <01.mahadi@gmail.com>
-  version: "1.5.1"
+  version: "1.6.0"
 ---
 
 # pr-ism
@@ -43,8 +43,8 @@ If the user gave nothing at all, ask for the PR link, number or branch — one q
 
 **Repeat reviews.** If the output has an `incremental:` line, this PR was reviewed before and
 new commits arrived. Parse `pr.since.diff` too (`--out .pr-ism/work/<id>/since.json`) and re-review
-only the functions it touches. Carry every other row over from `review.prev.json` unchanged, but
-drop their `hunk_id` (hunk ids are positional and shift) so the renderer re-resolves them by
+only the functions it touches. Carry every other row (and its findings, `source` included) over
+from `review.prev.json` unchanged, but drop their `hunk_id` (hunk ids are positional and shift) so the renderer re-resolves them by
 function. Start `summary.narrative` with one sentence on what changed since the last review. If it
 says the old head is unreachable, do a normal full review. Pass `--full` to force one.
 
@@ -76,6 +76,12 @@ under `skipped` — mention them in one line, do not review them. A segment name
 ### 4. Understand every change
 Work file by file, hunk by hunk. Load `references/review-rubric.md` now and apply it.
 
+**Engine.** Resolve `review.engine` (auto | prism | toolkit) as `references/toolkit-engine.md`
+describes. When it resolves to toolkit, load that file, spawn the pr-review-toolkit agents it
+lists in parallel, and have them write `.pr-ism/work/<id>/agent-findings.jsonl` while you write the
+rows below. Agents add findings only; the rows, RAG and verdicts stay yours. When it resolves to
+prism (always on claude.ai), everything below is the whole review.
+
 - Merge hunks that touch the same function into **one row**; split a hunk into several rows only
   when it spans several functions.
 - When the hunk alone cannot tell you what a change does (trimmed context, a renamed helper,
@@ -105,6 +111,12 @@ Use `hunk_id` from `changes.json` on every row so the renderer can attach lines,
 diff snippet. Use only the severity and verdict labels from the effective config. Narrative
 language and tone come from `report.language` and `report.tone`.
 
+With the toolkit engine, merge the agent findings into it before rendering:
+```
+python3 $SKILL/scripts/merge_findings.py .pr-ism/work/<id>/review.json --changes .pr-ism/work/<id>/changes.json --agents .pr-ism/work/<id>/agent-findings.jsonl --config .pr-ism/effective.json
+```
+If it prints `rows raised`, make the summary verdict and narrative match before rendering.
+
 ### 6. Render
 ```
 python3 $SKILL/scripts/render_report.py .pr-ism/work/<id>/review.json --changes .pr-ism/work/<id>/changes.json --config .pr-ism/effective.json
@@ -119,7 +131,8 @@ meant it. The script prints the report path and a one-line verdict summary.
   can open it in place. Never paste the HTML into the chat.
 
 Then give a chat summary of at most six lines: overall verdict, 🟢/🟡/🔴 counts, the two or three
-findings that matter most with file:line, and any question you need answered. Do not repeat the
+findings that matter most with file:line, the engine used (and findings per source with the
+toolkit), and any question you need answered. Do not repeat the
 whole table in chat — the report is the table.
 
 ### 8. Post to the PR (only when asked)

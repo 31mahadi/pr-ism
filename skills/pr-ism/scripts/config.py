@@ -39,6 +39,7 @@ ENUMS = {
     "links.style": ["auto", "github", "gitlab", "custom", "vscode", "file", "relative"],
     "links.editor": ["vscode", "cursor", "idea", "none"],
     "review.depth": ["quick", "standard", "deep"],
+    "review.engine": ["auto", "prism", "toolkit"],
 }
 LIST_ENUMS = {
     "report.sections": ["summary", "risk_overview", "table", "findings", "test_gaps", "questions"],
@@ -82,6 +83,8 @@ DOCS = {
     "links.editor": "Editor URL scheme used for local links (vscode://, cursor://, idea://).",
     "links.template": "With links.style=custom: URL pattern for a file at the head commit. Tokens: {web_base} {sha} {path} {line} {end} {number} {url}. Example (Bitbucket): {web_base}/src/{sha}/{path}#lines-{line}",
     "links.review_template": "With links.style=custom: optional pattern for the 'Open in review' link (defaults to links.template).",
+    "review.engine": "Who finds issues: auto = pr-review-toolkit agents when available (Claude Code with the plugin installed), else pr-ism's rubric; prism = rubric only; toolkit = agents, fail if unavailable.",
+    "review.min_agent_confidence": "Toolkit findings below this confidence (0-100) are dropped when merged.",
     "review.depth": "quick = diff only; standard = read surrounding source when a hunk is ambiguous; deep = trace callers/callees and tests.",
     "review.focus": "Review lenses to apply. Order = priority.",
     "review.ignore": "Glob patterns excluded from the table (still counted as skipped).",

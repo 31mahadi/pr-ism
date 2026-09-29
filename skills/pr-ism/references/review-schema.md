@@ -55,7 +55,9 @@ Fields marked ● are required.
       "suggestion": "Publish to billing.dlq with the original payload and attempt count.",
       "file": "internal/billing/webhook.go",
       "line": 79,
-      "row_ids": ["r1"]
+      "row_ids": ["r1"],                         // rows this finding belongs to; shown inside the expanded row
+      "source": "prism"                          // "prism" (you) or "toolkit:<agent>" (added by merge_findings.py)
+      // "also_found_by": ["toolkit:code-reviewer"], "confidence": 91   — set by merge_findings.py
     }
   ],
   "test_gaps": [
@@ -67,7 +69,20 @@ Fields marked ● are required.
 }
 ```
 
-`line_start`, `line_end`, `additions` and `deletions` are integers.
+`line_start`, `line_end`, `additions` and `deletions` are integers. Omit `source` on findings you
+write; it defaults to `prism`. `test_gaps` entries may carry `source` too.
+
+## agent-findings.jsonl (toolkit engine only)
+
+Written by the pr-review-toolkit agents, read by `merge_findings.py`. One JSON object per line:
+
+```json
+{"agent": "code-reviewer", "file": "internal/billing/webhook.go", "line": 79, "severity": "high", "title": "Exhausted retries are discarded", "detail": "…", "suggestion": "…", "confidence": 88}
+```
+
+`agent`, `file`, `line` (head side), `severity` (critical | high | medium | low | info; other
+common words are mapped onto `severity_scale`), `title`, `detail`, `suggestion`, `confidence`
+(0–100). See `toolkit-engine.md` for how they are merged.
 
 Rules the validator enforces: non-empty `rows`; every row has `file`, `change_type`, `logical`, `what`,
 `verdict`, `severity`; enum values match the rubric and the effective config. Everything else is optional

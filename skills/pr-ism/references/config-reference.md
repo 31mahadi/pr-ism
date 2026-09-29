@@ -58,6 +58,8 @@ the row's "Open in review" link jumps to that file's diff on the PR page.
 ### review
 | key | default | effect |
 |---|---|---|
+| `review.engine` | `auto` | `auto` use pr-review-toolkit agents when they are available in the session, else pr-ism's rubric · `prism` rubric only · `toolkit` agents, stop with an error if unavailable |
+| `review.min_agent_confidence` | `80` | toolkit findings below this confidence (0–100) are dropped at merge |
 | `review.depth` | `standard` | `quick` diff only · `standard` read surrounding source when a hunk is ambiguous · `deep` also trace callers/callees and existing tests |
 | `review.focus` | correctness, security, performance, tests, readability | lenses, in priority order; extras: `api` `data` `concurrency` `observability` |
 | `review.ignore` | lockfiles, dist/, vendor/, generated, snapshots… | globs dropped from the table (counted under skipped) |

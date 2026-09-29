@@ -75,6 +75,8 @@ td.what{max-width:420px}
 .chip.v{border:1px solid var(--line-strong);font-weight:500}
 .chip.v.blocking,.chip.v.needs-changes{color:var(--red);border-color:var(--red)}.chip.v.question{color:var(--amber);border-color:var(--amber)}.chip.v.lgtm{color:var(--green);border-color:var(--green)}
 .chip.ct{color:var(--muted);border:1px solid var(--line);font-weight:500}
+.chip.src{color:var(--muted);background:var(--hover);font-weight:500;font-family:var(--mono);font-size:11px}
+.detail .attached{margin:10px 0 0;padding-left:18px;font-size:13px;max-width:90ch}.detail .attached li{margin:0 0 6px}
 tr.detail td{background:var(--bg);padding:12px 14px 14px 28px}
 .detail .grid{display:grid;grid-template-columns:110px 1fr;gap:6px 14px;max-width:90ch;font-size:13px}
 .detail .grid dt{color:var(--muted);margin:0}.detail .grid dd{margin:0}
@@ -117,6 +119,7 @@ footer{color:var(--muted);font-size:12px;margin-top:48px;border-top:1px solid va
       <div class="toolbar">
         <input id="q" type="search" placeholder="Filter file, function, text…" aria-label="Filter rows">
         <select id="sev" aria-label="Minimum severity"><option value="">Any severity</option></select>
+        <select id="src" class="hidden" aria-label="Finding source"><option value="">Any source</option></select>
         <select id="group" aria-label="Group rows"><option value="file">Group by file</option><option value="severity">Group by severity</option><option value="logical">Group by logical change</option><option value="change_type">Group by change type</option><option value="none">No grouping</option></select>
         <button id="expand-all" type="button">Expand all</button>
         <button id="copy-md" type="button" title="Copy the visible rows + findings as a markdown PR comment">Copy as markdown</button>
@@ -138,9 +141,13 @@ const columns=cfg.columns||['file','function','change_type','logical','what','ve
 const sevScale=cfg.severity_scale||['info','low','medium','high','critical'];
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const md=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>');
-const qs=new URLSearchParams(location.search);const state={rag:new Set(),sev:'',q:'',group:qs.get('group')||cfg.group_by||'file',open:new Set(),active:-1};
+const qs=new URLSearchParams(location.search);const state={rag:new Set(),sev:'',src:'',q:'',group:qs.get('group')||cfg.group_by||'file',open:new Set(),active:-1};
 if(qs.get('theme'))document.documentElement.dataset.theme=qs.get('theme');
 const rows=(D.rows||[]).map((r,i)=>Object.assign({_i:i},r));const F=D.findings||[],G=D.test_gaps||[],Q=D.questions||[];
+const srcsOf=f=>[f.source||'prism',...(f.also_found_by||[])];
+const allSrcs=[...new Set(F.flatMap(srcsOf))].sort();const multiSrc=allSrcs.length>1;
+const rowFindings={};F.forEach(f=>(f.row_ids||[]).forEach(id=>(rowFindings[id]=rowFindings[id]||[]).push(f)));
+const srcChips=f=>multiSrc?srcsOf(f).map(x=>` <span class="chip src">${esc(x)}</span>`).join(''):'';
 const sevRank=s=>Math.max(0,sevScale.indexOf(String(s||'').toLowerCase()));
 const ragRank={red:0,amber:1,green:2};
 const link=(href,label,cls)=>href?`<a class="${cls||''}" href="${esc(href)}" title="${esc(href)}">${esc(label)}</a>`:`<span class="${cls||''}">${esc(label)}</span>`;
@@ -196,9 +203,10 @@ function cell(r,c){switch(c){
  default:return`<td>${esc(r[c]==null?'':r[c])}</td>`}}
 function detail(r){const pre=r.diff_snippet?`<pre>${r.diff_snippet.split('\n').map(l=>`<span class="${l[0]==='+'?'add':l[0]==='-'?'del':''}">${esc(l)}</span>`).join('\n')}</pre>`:'';
  const dl=[['Why it matters',r.why],['Notes',r.notes],['Suggestion',r.suggestion],['Impact',r.impact]].filter(x=>x[1]).map(x=>`<dt>${esc(x[0])}</dt><dd>${esc(x[1])}</dd>`).join('');
+ const att=(rowFindings[r.id]||[]).map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span> <b>${md(f.title)}</b>${f.line?` <span class="mono">:${esc(f.line)}</span>`:''}${f.source&&f.source!=='prism'||multiSrc?srcsOf(f).map(x=>` <span class="chip src">${esc(x)}</span>`).join(''):''}${f.detail?` — ${md(f.detail)}`:''}${f.suggestion?` <i>Suggestion: ${md(f.suggestion)}</i>`:''}</li>`).join('');
  const links=[r.line_link?link(r.line_link,'Open at line '+(r.line_start||'')):'',r.review_link?link(r.review_link,'Open in review'):''].filter(Boolean).join('');
- return`<div class="detail"><dl class="grid">${dl||'<dt></dt><dd class="empty">No further notes.</dd>'}</dl>${pre}${links?`<div class="links">${links}</div>`:''}</div>`}
-function visible(){const q=state.q.toLowerCase();return rows.filter(r=>(!state.rag.size||state.rag.has(r.logical))&&(!state.sev||sevRank(r.severity)>=sevRank(state.sev))&&(!q||[r.file,r.function,r.what,r.why,r.notes,r.change_type,r.verdict].join(' ').toLowerCase().includes(q)))}
+ return`<div class="detail"><dl class="grid">${dl||'<dt></dt><dd class="empty">No further notes.</dd>'}</dl>${att?`<ol class="attached">${att}</ol>`:''}${pre}${links?`<div class="links">${links}</div>`:''}</div>`}
+function visible(){const q=state.q.toLowerCase();return rows.filter(r=>(!state.rag.size||state.rag.has(r.logical))&&(!state.sev||sevRank(r.severity)>=sevRank(state.sev))&&(!state.src||(rowFindings[r.id]||[]).some(f=>srcsOf(f).includes(state.src)))&&(!q||[r.file,r.function,r.what,r.why,r.notes,r.change_type,r.verdict].join(' ').toLowerCase().includes(q)))}
 function sorted(list){const s=cfg.sort||'severity_desc';const c=list.slice();if(s==='severity_desc')c.sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)||ragRank[a.logical]-ragRank[b.logical]);else if(s==='severity_asc')c.sort((a,b)=>sevRank(a.severity)-sevRank(b.severity));else if(s==='logical')c.sort((a,b)=>ragRank[a.logical]-ragRank[b.logical]);else if(s==='file')c.sort((a,b)=>(a.file+a.line_start).localeCompare(b.file+b.line_start));return c}
 function groupKey(r){return state.group==='none'?'':state.group==='severity'?r.severity:state.group==='logical'?r.logical:state.group==='change_type'?r.change_type:r.file}
 function activeCols(){return state.group==='file'?columns.filter(c=>c!=='file'):columns}
@@ -215,12 +223,13 @@ function render(){const vis=visible();const cols=activeCols();document.querySele
 document.getElementById('spectrum').addEventListener('click',e=>{const b=e.target.closest('.seg');if(!b)return;const k=b.dataset.rag;state.rag.has(k)?state.rag.delete(k):state.rag.add(k);render()});
 document.getElementById('q').addEventListener('input',e=>{state.q=e.target.value;render()});
 document.getElementById('sev').addEventListener('change',e=>{state.sev=e.target.value;render()});
+if(multiSrc){const sel=document.getElementById('src');sel.classList.remove('hidden');sel.insertAdjacentHTML('beforeend',allSrcs.map(x=>`<option value="${esc(x)}">Findings from ${esc(x)}</option>`).join(''));sel.addEventListener('change',e=>{state.src=e.target.value;render()})}
 document.getElementById('group').addEventListener('change',e=>{state.group=e.target.value;render()});
 function toMarkdown(){const vis=sorted(visible());const e={green:'🟢',amber:'🟡',red:'🔴'};const out=[`**pr-ism review — ${ovLabel}**`,'',S.one_liner||'',''];
  (S.narrative||[]).forEach(p=>out.push(p,''));const cols=activeCols().filter(c=>!['lines'].includes(c));const head={file:'File',function:'Function',change_type:'Change',logical:'Logical',what:'What changed',why:'Why',verdict:'Verdict',severity:'Severity',impact:'Impact'};
  out.push('| '+cols.map(c=>head[c]||c).join(' | ')+' |','|'+cols.map(()=>'---').join('|')+'|');
  vis.forEach(r=>out.push('| '+cols.map(c=>{const v=c==='file'?(r.file_link?`[${r.file}](${r.file_link})`:r.file):c==='function'?(r.line_link?`[${r.function||'—'}](${r.line_link})`:(r.function||'—')):c==='logical'?`${e[r.logical]} ${r.logical}`:String(r[c]||'');return v.replace(/\|/g,'\\|').replace(/\n/g,' ')}).join(' | ')+' |'));
- if(F.length){out.push('','**Findings**');F.forEach(f=>out.push(`- **${f.severity}** — ${f.title}${f.file?` (\`${f.file}${f.line?':'+f.line:''}\`)`:''}${f.detail?': '+f.detail:''}${f.suggestion?` _Suggestion: ${f.suggestion}_`:''}`))}
+ if(F.length){out.push('','**Findings**');F.forEach(f=>out.push(`- **${f.severity}** — ${f.title}${f.file?` (\`${f.file}${f.line?':'+f.line:''}\`)`:''}${multiSrc?' · _'+srcsOf(f).join(', ')+'_':''}${f.detail?': '+f.detail:''}${f.suggestion?` _Suggestion: ${f.suggestion}_`:''}`))}
  if(G.length){out.push('','**Test gaps**');G.forEach(g=>out.push(`- \`${g.file}\`${g.function?' · '+g.function:''} — ${g.reason}`))}
  if(Q.length){out.push('','**Questions**');Q.forEach(q=>out.push('- '+(typeof q==='string'?q:q.text)))}
  return out.join('\n')}
@@ -235,7 +244,7 @@ document.addEventListener('keydown',e=>{const tag=(e.target.tagName||'').toLower
  else if(e.key==='t'){const cur=document.documentElement.dataset.theme;document.documentElement.dataset.theme=cur==='dark'?'light':'dark'}});
 
 // findings / gaps / questions
-document.getElementById('findings').innerHTML=F.length?`<ol>${F.slice().sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span> <span class="t">${md(f.title)}</span>${f.file?` <span class="loc">${link(f.link,f.file+(f.line?':'+f.line:''))}</span>`:''}<div class="d">${md(f.detail||'')}</div>${f.suggestion?`<div class="s">Suggestion: ${md(f.suggestion)}</div>`:''}</li>`).join('')}</ol>`:'<p class="empty">No findings beyond the per-function notes.</p>';
+document.getElementById('findings').innerHTML=F.length?`<ol>${F.slice().sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span> <span class="t">${md(f.title)}</span>${srcChips(f)}${f.file?` <span class="loc">${link(f.link,f.file+(f.line?':'+f.line:''))}</span>`:''}<div class="d">${md(f.detail||'')}</div>${f.suggestion?`<div class="s">Suggestion: ${md(f.suggestion)}</div>`:''}</li>`).join('')}</ol>`:'<p class="empty">No findings beyond the per-function notes.</p>';
 document.getElementById('test_gaps').innerHTML=G.length?`<ul>${G.map(g=>`<li><span class="mono">${esc(g.file)}${g.function?' · '+esc(g.function):''}</span> — ${md(g.reason)}</li>`).join('')}</ul>`:'<p class="empty">No test gaps detected.</p>';
 document.getElementById('questions').innerHTML=Q.length?`<ul>${Q.map(q=>`<li>${md(typeof q==='string'?q:q.text)}</li>`).join('')}</ul>`:'<p class="empty">Nothing to ask.</p>';
 document.getElementById('footer').textContent=`Generated ${m.generated_at||''} by ${m.reviewer||'pr-ism'}${m.config_hash?' · config '+m.config_hash:''}. Verdicts are a reviewer aid, not a gate.`;
