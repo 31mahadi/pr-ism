@@ -43,7 +43,7 @@ Invoke as `/pr-ism:pr-ism <ref>`.
 
 **claude.ai / Claude Desktop**: upload `pr-ism.skill.zip` from the [latest release](https://github.com/31mahadi/pr-ism/releases/latest) under *Settings → Skills*.
 
-**Requirements**: `python3` 3.9+ and `git`. GitHub PRs need `gh`, or `GITHUB_TOKEN` for the REST API. GitLab MRs need `glab`.
+**Requirements**: `python3` 3.9+ and `git`. GitHub PRs need `gh`, or `GITHUB_TOKEN` for the REST API. GitLab MRs need `glab`. Posting comments uses the same CLI; GitLab gets one summary note, not inline comments.
 
 ## Configure
 
@@ -66,7 +66,7 @@ Review files are written to `<repo>/.pr-ism/`. Add `.pr-ism/work/` and `.pr-ism/
 
 ## Limits
 
-- Function names are detected for most major languages. For other languages the row says `top-level`.
+- Function names are detected for most major languages. For others, Claude reads the file and names the function itself.
 - Binary files are flagged but not reviewed. Lockfiles, build output and vendored code are skipped (`review.ignore`).
 - The GitHub REST API caps a diff at about 300 files. For larger PRs, use `gh` or review the local branch.
 
