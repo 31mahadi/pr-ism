@@ -4,8 +4,6 @@ A Claude skill that reviews a pull request function by function and produces an 
 
 ![pr-ism report](docs/report.png)
 
-Private and proprietary. See [License](#license).
-
 ## Usage
 
 ```
@@ -32,14 +30,14 @@ Running it again on the same PR after new commits reviews only what changed sinc
 
 ## Install
 
-The repo is private, so you need access to `31mahadi/pr-ism` (`gh auth login`).
-
 **Claude Code plugin**
 ```
 /plugin marketplace add 31mahadi/pr-ism
 /plugin install pr-ism@pr-ism
 ```
 Invoke as `/pr-ism:pr-ism <ref>`.
+
+**Other agents (Codex, Cursor, OpenCode and more)**: `npx skills add 31mahadi/pr-ism` (add `-g` for all projects).
 
 **Manual**: copy `skills/pr-ism` into `~/.claude/skills/` or `<project>/.claude/skills/`.
 
@@ -88,4 +86,4 @@ CI then builds `pr-ism.skill.zip` and attaches it to the release.
 
 ## License
 
-Proprietary. © 2026 Mahadi Hassan. All rights reserved. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

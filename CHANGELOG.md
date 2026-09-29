@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.0 — 2026-09-29
+- Licensed under MIT and prepared for public release; README drops the private-access notes and adds the `npx skills add` install.
+
 ## 1.4.0 — 2026-09-29
 - Post a review back to the PR: `post_review.py` builds one GitHub review (summary + inline comments on diff lines) or a GitLab MR note. Dry run by default; `--post` sends it.
 - Repeat reviews: re-fetching a reviewed PR writes `pr.since.diff` with only the new commits and keeps the previous review as `review.prev.json`. `--since SHA` and `--full` override.
