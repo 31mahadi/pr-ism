@@ -2,6 +2,8 @@
 
 A Claude skill that reviews a pull request function by function and produces an interactive HTML report.
 
+![pr-ism report](docs/report.png)
+
 Private and proprietary. See [License](#license).
 
 ## Usage
@@ -24,6 +26,9 @@ The report contains:
 - **Findings**, **test gaps**, **questions for the author**
 
 Markdown output is also available (`output.format`).
+
+After a review, pr-ism can post it to the PR as inline comments. It shows a dry run first and posts only when you say yes.
+Running it again on the same PR after new commits reviews only what changed since the last run.
 
 ## Install
 

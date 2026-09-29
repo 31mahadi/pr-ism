@@ -31,6 +31,9 @@ Fields marked ● are required.
       "file": "internal/billing/webhook.go",     // ● path exactly as in changes.json
       "function": "handleWebhook",               // enclosing function; "top-level" / class name if none
       "hunk_id": "3f2a1c-h1",                    // from changes.json — gives lines, links, snippet for free
+      // "hunk_ids": ["3f2a1c-h1", "3f2a1c-h3"],  // instead of hunk_id when one row merges several hunks of a function
+      // directory summary row (large PRs): "file": "pkg/cmd/", "function": "(12 files)", no hunk_id,
+      //   notes listing the files; the renderer totals +/- and links to the PR's file list
       "line_start": 41,                          // optional if hunk_id given
       "line_end": 88,
       "change_type": "behavior-change",          // ● see rubric
@@ -63,6 +66,8 @@ Fields marked ● are required.
   ]
 }
 ```
+
+`line_start`, `line_end`, `additions` and `deletions` are integers.
 
 Rules the validator enforces: non-empty `rows`; every row has `file`, `change_type`, `logical`, `what`,
 `verdict`, `severity`; enum values match the rubric and the effective config. Everything else is optional

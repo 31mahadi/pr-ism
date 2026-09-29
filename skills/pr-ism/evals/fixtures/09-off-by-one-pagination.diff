@@ -1,0 +1,17 @@
+diff --git a/internal/export/pager.go b/internal/export/pager.go
+index 8f7624c..e718cb2 100644
+--- a/internal/export/pager.go
++++ b/internal/export/pager.go
+@@ -18,11 +18,11 @@ func FetchAll(ctx context.Context, c *Client) ([]Item, error) {
+ func FetchAll(ctx context.Context, c *Client) ([]Item, error) {
+ 	var all []Item
+-	for page := 0; page < c.TotalPages(); page++ {
++	for page := 1; page < c.TotalPages(); page++ {
+ 		items, err := c.ListPage(ctx, page, pageSize)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+ 		all = append(all, items...)
+ 	}
+ 	return all, nil
+ }

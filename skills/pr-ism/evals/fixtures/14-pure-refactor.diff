@@ -1,0 +1,17 @@
+diff --git a/utils/text.py b/utils/text.py
+index 70ca0e5..3ad1cd3 100644
+--- a/utils/text.py
++++ b/utils/text.py
+@@ -5,10 +5,4 @@
+ 
+ def slugify(title: str) -> str:
+-    s = title.strip().lower()
+-    out = []
+-    for ch in s:
+-        if ch.isalnum():
+-            out.append(ch)
+-        else:
+-            out.append("-")
+-    return "".join(out).strip("-")
++    s = title.strip().lower()
++    return "".join(ch if ch.isalnum() else "-" for ch in s).strip("-")

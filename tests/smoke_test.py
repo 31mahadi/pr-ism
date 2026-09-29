@@ -40,6 +40,7 @@ def check_pipeline():
         sh(["git", "init", "-q", "-b", "main"], d)
         sh(["git", "config", "user.email", "t@t"], d); sh(["git", "config", "user.name", "t"], d)
         sh(["git", "config", "core.hooksPath", "/dev/null"], d)  # ignore the developer's global hooks
+        (d / ".git" / "info" / "exclude").write_text(".pr-ism/\n")
         (d / "src").mkdir(); (d / "src" / "a.py").write_text("def f(x):\n    return x\n")
         (d / "yarn.lock").write_text("lock\n")
         sh(["git", "add", "-A"], d); sh(["git", "commit", "-qm", "init"], d)
@@ -79,6 +80,32 @@ def check_pipeline():
         bad = dict(review); bad["rows"] = [dict(review["rows"][0], logical="blue")]
         (w / "bad.json").write_text(json.dumps(bad))
         r = sh([sys.executable, S / "render_report.py", w / "bad.json", "--validate-only"], d, check=False); assert r.returncode == 1 and "logical" in r.stdout
+        # post_review: local changes have nowhere to post; a GitHub-shaped one yields inline + overflow comments
+        r = sh([sys.executable, S / "post_review.py", w / "work" / "x" / "review.json", "--changes", w / "work" / "x" / "changes.json", "--config", eff], d, check=False)
+        assert r.returncode == 1 and "nothing to post to" in (r.stdout + r.stderr), r.stdout + r.stderr
+        gh = dict(ch, meta={**ch["meta"], "provider": "github", "repo": "o/r", "number": 7, "head_sha": "abc"})
+        (w / "gh.json").write_text(json.dumps(gh))
+        rv = dict(review, findings=[{"severity": "high", "title": "None path untested", "file": "src/a.py", "line": 2},
+                                    {"severity": "medium", "title": "off-diff", "file": "src/a.py", "line": 999}],
+                  rows=[dict(review["rows"][0], verdict="needs-changes", severity="high"), review["rows"][1]])
+        (w / "rv.json").write_text(json.dumps(rv))
+        dry = sh([sys.executable, S / "post_review.py", w / "rv.json", "--changes", w / "gh.json", "--config", eff], d).stdout
+        assert "dry run" in dry and "inline comments: 2" in dry and "in summary only: 1" in dry, dry
+        payload = json.loads((w / "comments.json").read_text())
+        assert payload["event"] == "COMMENT" and payload["commit_id"] == "abc" and "off-diff" in payload["body"], payload
+        # repeat review: second fetch after a new commit writes pr.since.diff with only the new change
+        (w / "work" / "x" / "review.json").write_text(json.dumps(review))
+        sh(["git", "checkout", "-q", "feat"], d)
+        (d / "src" / "b.py").write_text("def h():\n    return 2\n")
+        sh(["git", "add", "-A"], d); sh(["git", "commit", "-qm", "add h"], d)
+        sh(["git", "checkout", "-q", "main"], d)
+        again = sh([sys.executable, S / "fetch_pr.py", "feat", "--out", w / "work" / "x"], d).stdout
+        assert "incremental:" in again, again
+        since = (w / "work" / "x" / "pr.since.diff").read_text()
+        assert "src/b.py" in since and "src/a.py" not in since, since
+        assert (w / "work" / "x" / "review.prev.json").exists() and not (w / "work" / "x" / "review.json").exists()
+        same = sh([sys.executable, S / "fetch_pr.py", "feat", "--out", w / "work" / "x"], d).stdout
+        assert "unchanged since the last review" in same and not (w / "work" / "x" / "pr.since.diff").exists(), same
         print("ok  pipeline:", out.strip().splitlines()[-1])
 
 

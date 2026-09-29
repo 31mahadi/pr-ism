@@ -1,0 +1,21 @@
+diff --git a/src/main/java/com/acme/orders/DiscountService.java b/src/main/java/com/acme/orders/DiscountService.java
+index cc8943b..23b18fa 100644
+--- a/src/main/java/com/acme/orders/DiscountService.java
++++ b/src/main/java/com/acme/orders/DiscountService.java
+@@ -20,6 +20,15 @@ public class DiscountService {
+ public class DiscountService {
+ 
+     public BigDecimal apply(Order order) {
+-        return order.getSubtotal();
++        BigDecimal subtotal = order.getSubtotal();
++        if (order.getCouponCode() == null) {
++            return subtotal;
++        }
++        Coupon coupon = couponRepository.findActive(order.getCouponCode());
++        if (coupon == null || coupon.isExpired(clock.instant())) {
++            return subtotal;
++        }
++        BigDecimal pct = coupon.getPercentOff().movePointLeft(2);
++        return subtotal.subtract(subtotal.multiply(pct)).setScale(2, RoundingMode.HALF_EVEN);
+     }
+ }

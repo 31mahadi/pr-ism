@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Resolve a PR reference into a unified diff plus metadata.
 
-Usage: fetch_pr.py <ref> [--out DIR] [--base BRANCH]
+Usage: fetch_pr.py <ref> [--out DIR] [--base BRANCH] [--since SHA] [--full]
 
 Accepted refs
   https://github.com/o/r/pull/123          GitHub PR URL     (gh CLI, else GitHub REST API)
@@ -12,7 +12,13 @@ Accepted refs
   path/to/change.diff | change.patch        a patch file
   -                                         a diff on stdin
 
-Writes <out>/pr.diff and <out>/pr.json and prints both paths. Exit code 1 with a
+Writes <out>/pr.diff and <out>/pr.json and prints both paths.
+
+Repeat reviews: when <out>/pr.json already exists and the PR head moved, it also writes
+<out>/pr.since.diff (only the commits since the last review), moves the old review.json to
+review.prev.json and prints `incremental: <old>..<new>`. --since SHA forces the starting commit;
+--full skips all of this. If the old head is unreachable (force-push), it says so and falls back
+to a full review. Exit code 1 with a
 plain-English reason when a ref cannot be resolved (missing CLI, auth, not a repo...).
 """
 from __future__ import annotations
@@ -204,6 +210,22 @@ def fetch_patch(path: str) -> tuple[str, dict]:
     }
 
 
+# ---------------------------------------------------------------- repeat reviews
+
+def since_diff(meta: dict, old: str, new: str) -> str | None:
+    """Diff of just the commits between two heads, or None when the old head is gone (force-push)."""
+    if in_git_repo():
+        have = all(subprocess.run(["git", "cat-file", "-e", f"{c}^{{commit}}"], capture_output=True).returncode == 0 for c in (old, new))
+        if have:
+            return subprocess.run(["git", "diff", "--find-renames", old, new], capture_output=True, text=True).stdout
+    if meta.get("provider") == "github" and shutil.which("gh"):
+        r = subprocess.run(["gh", "api", "-H", "Accept: application/vnd.github.diff", f"repos/{meta['repo']}/compare/{old}...{new}"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout
+    return None
+
+
 # ---------------------------------------------------------------- dispatch
 
 def resolve(ref: str, base: str | None) -> tuple[str, dict]:
@@ -237,17 +259,36 @@ def main(argv: list[str]) -> None:
     ref = argv[0]
     out = Path(argv[argv.index("--out") + 1]) if "--out" in argv else None
     base = argv[argv.index("--base") + 1] if "--base" in argv else None
+    since = argv[argv.index("--since") + 1] if "--since" in argv else None
     diff, meta = resolve(ref, base)
     if not diff.strip():
         die("no changes between the requested refs")
     ident = str(meta.get("number") or (meta.get("head") or "diff").replace("/", "-"))
     out = out or Path(".pr-ism") / "work" / ident
     out.mkdir(parents=True, exist_ok=True)
+    prev = json.loads((out / "pr.json").read_text(encoding="utf-8")) if (out / "pr.json").exists() else {}
+    (out / "pr.since.diff").unlink(missing_ok=True)
+    notes = []
+    old, new = since or prev.get("head_sha"), meta.get("head_sha")
+    if "--full" not in argv and old and new and old != new:
+        inc = since_diff(meta, old, new)
+        if inc and inc.strip():
+            (out / "pr.since.diff").write_text(inc, encoding="utf-8")
+            meta.update({"incremental": True, "previous_head_sha": old})
+            if (out / "review.json").exists():
+                (out / "review.json").replace(out / "review.prev.json")
+            notes.append(f"incremental: {old[:10]}..{new[:10]} -> {out / 'pr.since.diff'}")
+        else:
+            notes.append(f"previous head {old[:10]} is not reachable (force-push?); doing a full review")
+    elif "--full" not in argv and old and old == new:
+        notes.append("unchanged since the last review (same head commit)")
     (out / "pr.diff").write_text(diff, encoding="utf-8")
     meta.update({"id": ident, "fetched_at": stamp(), "diff_sha256": hashlib.sha256(diff.encode()).hexdigest()[:12],
                  "root": meta.get("root") or (run(["git", "rev-parse", "--show-toplevel"]).strip() if in_git_repo() else str(Path.cwd()))})
     (out / "pr.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"diff: {out / 'pr.diff'}\nmeta: {out / 'pr.json'}\ntitle: {meta['title']}\nrepo: {meta['repo']}  base: {meta.get('base')}  head: {meta.get('head')}")
+    for n in notes:
+        print(n)
 
 
 if __name__ == "__main__":

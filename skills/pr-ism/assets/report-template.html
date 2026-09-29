@@ -4,13 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>__PRISM_TITLE__</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
   --bg:#F3F5F8;--surface:#FFFFFF;--ink:#172033;--muted:#62708A;--line:#DCE2EA;--line-strong:#B9C3D1;--accent:#2757D6;--accent-ink:#FFFFFF;
   --green:#1F8B4D;--amber:#C47A00;--red:#C43030;--green-soft:#E3F3E9;--amber-soft:#FBF0DC;--red-soft:#FBE3E3;--hover:#EEF2F7;
-  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121721;--surface:#1A2130;--ink:#E6EBF2;--muted:#8B97AB;--line:#2A3446;--line-strong:#3C4A60;--accent:#7FA3FF;--accent-ink:#0E1420;--green:#4CC479;--amber:#F0B34A;--red:#F07272;--green-soft:#173627;--amber-soft:#3A2C10;--red-soft:#3D1D1D;--hover:#202A3B}}
@@ -139,6 +137,7 @@ const cfg=D.render||{};const sections=cfg.sections||['summary','risk_overview','
 const columns=cfg.columns||['file','function','change_type','logical','what','verdict','severity'];
 const sevScale=cfg.severity_scale||['info','low','medium','high','critical'];
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const md=s=>esc(s).replace(/`([^`]+)`/g,'<code>$1</code>');
 const qs=new URLSearchParams(location.search);const state={rag:new Set(),sev:'',q:'',group:qs.get('group')||cfg.group_by||'file',open:new Set(),active:-1};
 if(qs.get('theme'))document.documentElement.dataset.theme=qs.get('theme');
 const rows=(D.rows||[]).map((r,i)=>Object.assign({_i:i},r));const F=D.findings||[],G=D.test_gaps||[],Q=D.questions||[];
@@ -167,9 +166,9 @@ document.getElementById('stats').innerHTML=[['files',st.files],['functions',st.f
 
 // summary / risk
 const S=D.summary||{};
-document.getElementById('summary').innerHTML=(S.one_liner?`<p class="one">${esc(S.one_liner)}</p>`:'')+(S.narrative||[]).map(p=>`<p>${esc(p)}</p>`).join('')+((S.themes||[]).length?`<div class="themes">${S.themes.map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:'');
+document.getElementById('summary').innerHTML=(S.one_liner?`<p class="one">${md(S.one_liner)}</p>`:'')+(S.narrative||[]).map(p=>`<p>${md(p)}</p>`).join('')+((S.themes||[]).length?`<div class="themes">${S.themes.map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:'');
 const R=D.risk_overview||{};const riskItems=[];
-[['Red paths touched','red_paths_touched'],['Breaking changes','breaking_changes'],['Migrations','migrations'],['Dependency changes','deps'],['Other risks','other']].forEach(([label,key])=>{(R[key]||[]).forEach(x=>riskItems.push(`<li><b>${esc(label)}:</b> ${esc(typeof x==='string'?x:(x.text||JSON.stringify(x)))}</li>`))});
+[['Red paths touched','red_paths_touched'],['Breaking changes','breaking_changes'],['Migrations','migrations'],['Dependency changes','deps'],['Other risks','other']].forEach(([label,key])=>{(R[key]||[]).forEach(x=>riskItems.push(`<li><b>${esc(label)}:</b> ${md(typeof x==='string'?x:(x.text||JSON.stringify(x)))}</li>`))});
 document.getElementById('risk').innerHTML=riskItems.length?`<ul>${riskItems.join('')}</ul>`:'<p class="empty">Nothing risky stood out.</p>';
 
 // file nav
@@ -188,8 +187,8 @@ function cell(r,c){switch(c){
  case'function':return`<td class="function" title="${esc(r.function||'')}">${link(r.line_link,r.function||'—')}</td>`;
  case'change_type':return`<td><span class="chip ct">${esc(r.change_type||'')}</span></td>`;
  case'logical':return`<td><span class="chip ${esc(r.logical)}">${esc(r.logical)}</span></td>`;
- case'what':return`<td class="what">${esc(r.what||'')}</td>`;
- case'why':return`<td class="what">${esc(r.why||'')}</td>`;
+ case'what':return`<td class="what">${md(r.what||'')}</td>`;
+ case'why':return`<td class="what">${md(r.why||'')}</td>`;
  case'verdict':return`<td><span class="chip v ${esc(r.verdict)}">${esc(r.verdict||'')}</span></td>`;
  case'severity':return`<td><span class="chip sev ${esc(r.severity)}">${esc(r.severity||'')}</span></td>`;
  case'impact':return`<td>${esc(r.impact||'')}</td>`;
@@ -236,9 +235,9 @@ document.addEventListener('keydown',e=>{const tag=(e.target.tagName||'').toLower
  else if(e.key==='t'){const cur=document.documentElement.dataset.theme;document.documentElement.dataset.theme=cur==='dark'?'light':'dark'}});
 
 // findings / gaps / questions
-document.getElementById('findings').innerHTML=F.length?`<ol>${F.slice().sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span> <span class="t">${esc(f.title)}</span>${f.file?` <span class="loc">${link(f.link,f.file+(f.line?':'+f.line:''))}</span>`:''}<div class="d">${esc(f.detail||'')}</div>${f.suggestion?`<div class="s">Suggestion: ${esc(f.suggestion)}</div>`:''}</li>`).join('')}</ol>`:'<p class="empty">No findings beyond the per-function notes.</p>';
-document.getElementById('test_gaps').innerHTML=G.length?`<ul>${G.map(g=>`<li><span class="mono">${esc(g.file)}${g.function?' · '+esc(g.function):''}</span> — ${esc(g.reason)}</li>`).join('')}</ul>`:'<p class="empty">No test gaps detected.</p>';
-document.getElementById('questions').innerHTML=Q.length?`<ul>${Q.map(q=>`<li>${esc(typeof q==='string'?q:q.text)}</li>`).join('')}</ul>`:'<p class="empty">Nothing to ask.</p>';
+document.getElementById('findings').innerHTML=F.length?`<ol>${F.slice().sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span> <span class="t">${md(f.title)}</span>${f.file?` <span class="loc">${link(f.link,f.file+(f.line?':'+f.line:''))}</span>`:''}<div class="d">${md(f.detail||'')}</div>${f.suggestion?`<div class="s">Suggestion: ${md(f.suggestion)}</div>`:''}</li>`).join('')}</ol>`:'<p class="empty">No findings beyond the per-function notes.</p>';
+document.getElementById('test_gaps').innerHTML=G.length?`<ul>${G.map(g=>`<li><span class="mono">${esc(g.file)}${g.function?' · '+esc(g.function):''}</span> — ${md(g.reason)}</li>`).join('')}</ul>`:'<p class="empty">No test gaps detected.</p>';
+document.getElementById('questions').innerHTML=Q.length?`<ul>${Q.map(q=>`<li>${md(typeof q==='string'?q:q.text)}</li>`).join('')}</ul>`:'<p class="empty">Nothing to ask.</p>';
 document.getElementById('footer').textContent=`Generated ${m.generated_at||''} by ${m.reviewer||'pr-ism'}${m.config_hash?' · config '+m.config_hash:''}. Verdicts are a reviewer aid, not a gate.`;
 if(qs.get('expand')==='all')rows.forEach(r=>state.open.add(r._i));
 render();

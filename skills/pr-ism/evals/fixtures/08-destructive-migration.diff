@@ -1,0 +1,11 @@
+diff --git a/db/migrations/20260929_drop_legacy_email.sql b/db/migrations/20260929_drop_legacy_email.sql
+new file mode 100644
+index 0000000..be7b955
+--- /dev/null
++++ b/db/migrations/20260929_drop_legacy_email.sql
+@@ -0,0 +1,5 @@
++-- Consolidate contact email into user_contacts
++ALTER TABLE users DROP COLUMN legacy_email;
++ALTER TABLE users DROP COLUMN email_verified_at;
++
++CREATE INDEX idx_user_contacts_user_id ON user_contacts (user_id);

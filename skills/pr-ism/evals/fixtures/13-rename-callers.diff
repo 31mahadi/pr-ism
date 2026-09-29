@@ -1,0 +1,25 @@
+diff --git a/src/users/service.ts b/src/users/service.ts
+index ada135d..ff9d1b4 100644
+--- a/src/users/service.ts
++++ b/src/users/service.ts
+@@ -20,6 +20,6 @@ export class UserService {
+ export class UserService {
+   constructor(private readonly repo: UserRepo) {}
+ 
+-  async getUserById(id: string): Promise<User | null> {
++  async findUser(id: string): Promise<User | null> {
+     return this.repo.findOne({ id });
+   }
+diff --git a/src/users/controller.ts b/src/users/controller.ts
+index f84a85f..19fee61 100644
+--- a/src/users/controller.ts
++++ b/src/users/controller.ts
+@@ -30,7 +30,7 @@ export async function showUser(req: Request, res: Response) {
+ export async function showUser(req: Request, res: Response) {
+   const user = await userService.getUserById(req.params.id);
+   if (!user) {
+-    return res.status(404).send();
++    return res.status(404).json({ error: "user not found" });
+   }
+   res.json(user);
+ }

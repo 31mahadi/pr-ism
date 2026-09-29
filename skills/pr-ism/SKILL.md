@@ -1,11 +1,11 @@
 ---
 name: pr-ism
-description: Reviews a pull request or merge request end to end and delivers an interactive HTML report — a summary plus a navigable, function-level table (file link, function, change type, green/amber/red logical-change rating, what changed, verdict, severity/impact), findings, test gaps and questions. Use this whenever the user asks to review, audit, summarise, explain, risk-assess or "check" a PR, MR, diff, patch, branch or commit range — including when they only paste a GitHub/GitLab PR URL, a `#123`, a branch name, or say "look at this PR before I merge". Also handles `config` to customise the output (columns, sections, grouping, link style, severity labels, review depth, ignore and red-path globs). Invoke with `/pr-ism PR-REF` or `/pr-ism config`.
+description: Reviews a pull request or merge request end to end and delivers an interactive HTML report — a summary plus a navigable, function-level table (file link, function, change type, green/amber/red logical-change rating, what changed, verdict, severity/impact), findings, test gaps and questions. Use this whenever the user asks to review, audit, summarise, explain, risk-assess or "check" a PR, MR, diff, patch, branch or commit range — including when they only paste a GitHub/GitLab PR URL, a `#123`, a branch name, or say "look at this PR before I merge". Can post the review back to the PR as comments and re-review only new commits. Also handles `config` to customise the output (columns, sections, grouping, link style, severity labels, review depth, ignore and red-path globs). Invoke with `/pr-ism PR-REF` or `/pr-ism config`.
 license: Proprietary. See LICENSE
 compatibility: Needs python3 (3.9+) and git. GitHub PRs use the gh CLI, else the REST API (GITHUB_TOKEN for private), else a git fetch of refs/pull/N/head from inside the clone; GitLab MRs use glab or refs/merge-requests/N/head. Other providers work via a local branch, commit range or patch file. The HTML report is self-contained and works offline.
 metadata:
   author: Mahadi Hassan <01.mahadi@gmail.com>
-  version: "1.3.0"
+  version: "1.4.0"
 ---
 
 # pr-ism
@@ -41,6 +41,13 @@ against the default branch — pass `--base` to override), `a..b`, a `.diff`/`.p
 for stdin. If the user gave no ref and the message contains a diff, save it to a file and pass that.
 If the user gave nothing at all, ask for the PR link, number or branch — one question, then proceed.
 
+**Repeat reviews.** If the output has an `incremental:` line, this PR was reviewed before and
+new commits arrived. Parse `pr.since.diff` too (`--out .pr-ism/work/<id>/since.json`) and re-review
+only the functions it touches. Carry every other row over from `review.prev.json` unchanged, but
+drop their `hunk_id` (hunk ids are positional and shift) so the renderer re-resolves them by
+function. Start `summary.narrative` with one sentence on what changed since the last review. If it
+says the old head is unreachable, do a normal full review. Pass `--full` to force one.
+
 If the script exits with an error (no `gh`, not logged in, not a git repo, unknown ref), show its
 message verbatim and offer the next step (`gh auth login`, paste the diff, run inside the repo).
 Do not try to reconstruct the diff yourself.
@@ -61,7 +68,8 @@ python3 $SKILL/scripts/parse_diff.py show .pr-ism/work/<id>/changes.json <path>:
 `changes.json` holds everything (per hunk: `id`, `new_range`, `enclosing_function`,
 `definitions_touched`, `definition_changed`, per-function `segments` with line range and snippet,
 links; per source file: `related_test_changed`). Read it whole only when the PR is small (under
-~15 files); on large PRs it is big, so work from the index and `show`. Ignored files are listed
+~15 files); it is about 3× the size of the diff, so on large PRs never `cat` it and work from the
+index and `show`. Ignored files are listed
 under `skipped` — mention them in one line, do not review them. A segment named
 `old → new` means the parser saw a rename; verify call sites were updated.
 
@@ -79,14 +87,17 @@ Work file by file, hunk by hunk. Load `references/review-rubric.md` now and appl
 - Judge through the configured `review.focus` lenses in that order. Each finding needs evidence
   (a line, a caller, a missing branch), not a vibe.
 - Track test coverage: the index lists source files under `review.require_tests_for` with no
-  related test change (`related_test_changed` is false). Each becomes a `test_gaps` entry unless
-  the change is green and trivially safe — say so in the entry's `reason` if you waive it.
+  related test change (`related_test_changed` is false; it is true when a test in the PR matches
+  the file name or mentions the module or package). Each becomes a `test_gaps` entry unless the
+  change is green and trivially safe, or a test elsewhere in the PR demonstrably exercises it; then
+  leave it out rather than adding a waived entry.
 - When the parser could not name a function (`top-level` on a language it does not know, e.g.
   Haskell, Lua, OCaml), read the file and name the enclosing definition yourself; note
   "named by reading the file" in `notes`.
 - More than `review.max_files_inline` files: fully review red and amber files plus anything with a
-  finding; summarise the remaining green files as one row per directory with `change_type` set to
-  the dominant kind and `notes: "N files summarised"`.
+  finding; summarise the remaining green files as one row per directory: `file` is the directory
+  path ending in `/`, `function` is `"(N files)"`, no `hunk_id`, `change_type` is the dominant kind,
+  and `notes` lists the file names.
 
 ### 5. Write `review.json`
 Follow `references/review-schema.md` exactly. Write it to `.pr-ism/work/<id>/review.json`.
@@ -99,7 +110,8 @@ language and tone come from `report.language` and `report.tone`.
 python3 $SKILL/scripts/render_report.py .pr-ism/work/<id>/review.json --changes .pr-ism/work/<id>/changes.json --config .pr-ism/effective.json
 ```
 If validation fails it prints every problem; fix `review.json` and rerun rather than editing the
-HTML. The script prints the report path and a one-line verdict summary.
+HTML. `warning:` lines flag contradictions (e.g. a `medium` row marked `lgtm`); fix them unless you
+meant it. The script prints the report path and a one-line verdict summary.
 
 ### 7. Deliver
 - **Claude Code / a terminal**: print the report path (already opened if `output.open` is true).
@@ -109,6 +121,17 @@ HTML. The script prints the report path and a one-line verdict summary.
 Then give a chat summary of at most six lines: overall verdict, 🟢/🟡/🔴 counts, the two or three
 findings that matter most with file:line, and any question you need answered. Do not repeat the
 whole table in chat — the report is the table.
+
+### 8. Post to the PR (only when asked)
+For a GitHub PR or GitLab MR, offer once to post the review as PR comments. Run a dry run first
+and show the counts:
+```
+python3 $SKILL/scripts/post_review.py .pr-ism/work/<id>/review.json --changes .pr-ism/work/<id>/changes.json --config .pr-ism/effective.json
+```
+It builds one review: a summary body plus inline comments for findings and for
+`needs-changes`/`blocking`/`question` rows on lines inside the diff (the rest go in the body).
+Add `--post` only after the user says yes. It posts as a plain comment; pass
+`--event request-changes` or `--event approve` only when the user asks for that. GitLab gets one MR note.
 
 ---
 

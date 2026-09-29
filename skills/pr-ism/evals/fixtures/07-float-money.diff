@@ -1,0 +1,17 @@
+diff --git a/src/billing/invoice.ts b/src/billing/invoice.ts
+index 27fcd2b..530f096 100644
+--- a/src/billing/invoice.ts
++++ b/src/billing/invoice.ts
+@@ -10,8 +10,8 @@ export function computeTotal(items: LineItem[]): number {
+ export function computeTotal(items: LineItem[], taxRate: number): number {
+-  let totalCents = 0;
++  let total = 0;
+   for (const item of items) {
+-    totalCents += item.unitPriceCents * item.quantity;
++    total += (item.unitPriceCents / 100) * item.quantity;
+   }
+-  const taxCents = Math.round(totalCents * taxRate);
+-  return totalCents + taxCents;
++  const tax = total * taxRate;
++  return Math.round((total + tax) * 100);
+ }

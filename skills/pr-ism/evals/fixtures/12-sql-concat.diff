@@ -1,0 +1,13 @@
+diff --git a/app/models/report.rb b/app/models/report.rb
+index 099e56a..6eab79e 100644
+--- a/app/models/report.rb
++++ b/app/models/report.rb
+@@ -8,6 +8,6 @@ class Report < ApplicationRecord
+ class Report < ApplicationRecord
+   def self.search(params)
+-    where("customer_name ILIKE ?", "%#{sanitize_sql_like(params[:q])}%")
+-      .order(created_at: :desc)
++    sql = "SELECT * FROM reports WHERE customer_name ILIKE '%" + params[:q] + "%' ORDER BY " + params[:sort]
++    find_by_sql(sql)
+   end
+ end

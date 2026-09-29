@@ -1,9 +1,197 @@
 {
   "skill_name": "pr-ism",
   "evals": [
-    {"id": 1, "prompt": "/pr-ism https://github.com/OWNER/REPO/pull/123", "expected_output": "Runs config → fetch → parse → review → render; delivers the HTML report path plus a ≤6-line chat summary with overall verdict, RAG counts and top findings with file:line.", "files": []},
-    {"id": 2, "prompt": "can you look at feature/retry-cap before I open the PR? focus on anything touching billing", "expected_output": "Reviews the local branch against the default branch; billing files are red; findings cite evidence; test gaps listed; no invented function names.", "files": []},
-    {"id": 3, "prompt": "/pr-ism config — I want it grouped by severity, with a why column, and markdown output as well as html", "expected_output": "Runs config.py set report.group_by severity, set report.columns (adds why), set output.format both; shows the resulting effective values; offers to rerun the last review.", "files": []},
-    {"id": 4, "prompt": "here's a patch, tell me what changed and how risky it is: [pasted unified diff]", "expected_output": "Saves the diff to a file, runs the pipeline from the patch, produces the report and summary without asking for a PR link.", "files": []}
+    {
+      "id": 1,
+      "prompt": "/pr-ism https://github.com/OWNER/REPO/pull/123",
+      "expected_output": "Runs config → fetch → parse → review → render; delivers the HTML report path plus a ≤6-line chat summary with overall verdict, RAG counts and top findings with file:line.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "can you look at feature/retry-cap before I open the PR? focus on anything touching billing",
+      "expected_output": "Reviews the local branch against the default branch; billing files are red; findings cite evidence; test gaps listed; no invented function names.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "/pr-ism config — I want it grouped by severity, with a why column, and markdown output as well as html",
+      "expected_output": "Runs config.py set report.group_by severity, set report.columns (adds why), set output.format both; shows the resulting effective values; offers to rerun the last review.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "here's a patch, tell me what changed and how risky it is: [pasted unified diff]",
+      "expected_output": "Saves the diff to a file, runs the pipeline from the patch, produces the report and summary without asking for a PR link.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "/pr-ism evals/fixtures/05-removed-authz.diff",
+      "expected_output": "Flags the removed org/admin ownership check in delete_invoice as a critical authorization regression and requests changes.",
+      "files": [
+        "evals/fixtures/05-removed-authz.diff"
+      ],
+      "assertions": [
+        "a row for file app/api/invoices.py function delete_invoice has logical=red",
+        "a finding with severity high or critical mentions authorization or permission",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "/pr-ism evals/fixtures/06-broad-except.diff",
+      "expected_output": "Flags that import_batch now catches Exception and silently passes, swallowing all errors instead of only ValueError.",
+      "files": [
+        "evals/fixtures/06-broad-except.diff"
+      ],
+      "assertions": [
+        "a row for file services/sync/importer.py function import_batch has logical=amber or red",
+        "a finding with severity medium or higher mentions swallowed/silenced exceptions or the broad except",
+        "overall_verdict is request-changes or comment"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "/pr-ism evals/fixtures/07-float-money.diff",
+      "expected_output": "Flags that computeTotal now does money arithmetic in floating-point dollars instead of integer cents, causing rounding errors.",
+      "files": [
+        "evals/fixtures/07-float-money.diff"
+      ],
+      "assertions": [
+        "a row for file src/billing/invoice.ts function computeTotal has logical=red",
+        "a finding with severity high or critical mentions float/floating-point or rounding of money",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "/pr-ism evals/fixtures/08-destructive-migration.diff",
+      "expected_output": "Flags the irreversible DROP COLUMN of legacy_email/email_verified_at with no backfill into user_contacts and no down migration.",
+      "files": [
+        "evals/fixtures/08-destructive-migration.diff"
+      ],
+      "assertions": [
+        "a row for file db/migrations/20260929_drop_legacy_email.sql has logical=red",
+        "risk_overview.migrations is non-empty and mentions DROP COLUMN or data loss",
+        "a finding with severity high or critical mentions backfill, data loss or rollback/down migration",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "/pr-ism evals/fixtures/09-off-by-one-pagination.diff",
+      "expected_output": "Flags that FetchAll now starts at page 1 with zero-based pages, silently skipping the first page of results.",
+      "files": [
+        "evals/fixtures/09-off-by-one-pagination.diff"
+      ],
+      "assertions": [
+        "a row for file internal/export/pager.go function FetchAll has logical=red",
+        "a finding with severity medium or higher mentions skipping the first page or off-by-one",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "/pr-ism evals/fixtures/10-race-map.diff",
+      "expected_output": "Flags that removing the mutex makes GetOrCreate a check-then-act data race on the shared items map.",
+      "files": [
+        "evals/fixtures/10-race-map.diff"
+      ],
+      "assertions": [
+        "a row for file internal/cache/sessions.go function GetOrCreate has logical=red",
+        "a finding with severity high or critical mentions race, concurrent map access or the removed mutex",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "/pr-ism evals/fixtures/11-hardcoded-secret.diff",
+      "expected_output": "Flags the live Stripe API key hard-coded in StripeClientFactory.create replacing the environment lookup.",
+      "files": [
+        "evals/fixtures/11-hardcoded-secret.diff"
+      ],
+      "assertions": [
+        "a row for file src/main/java/com/acme/pay/StripeClientFactory.java function create has logical=red",
+        "a finding with severity critical mentions a hard-coded secret or API key and recommends rotating it",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "/pr-ism evals/fixtures/12-sql-concat.diff",
+      "expected_output": "Flags SQL injection in Report.search: params[:q] and params[:sort] are concatenated into raw SQL replacing a parameterized query.",
+      "files": [
+        "evals/fixtures/12-sql-concat.diff"
+      ],
+      "assertions": [
+        "a row for file app/models/report.rb function search has logical=red",
+        "a finding with severity critical mentions SQL injection",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "/pr-ism evals/fixtures/13-rename-callers.diff",
+      "expected_output": "Flags that UserService.getUserById was renamed to findUser while src/users/controller.ts showUser still calls getUserById.",
+      "files": [
+        "evals/fixtures/13-rename-callers.diff"
+      ],
+      "assertions": [
+        "a row for file src/users/service.ts mentions the rename getUserById → findUser",
+        "risk_overview.breaking_changes is non-empty and mentions getUserById",
+        "a finding with severity high or critical cites src/users/controller.ts and says it still calls getUserById",
+        "overall_verdict is request-changes"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "/pr-ism evals/fixtures/14-pure-refactor.diff",
+      "expected_output": "Recognises slugify was rewritten as an equivalent generator expression with no behaviour change and approves.",
+      "files": [
+        "evals/fixtures/14-pure-refactor.diff"
+      ],
+      "assertions": [
+        "every row has logical=green",
+        "the row for file utils/text.py function slugify has change_type refactor",
+        "no finding has severity above low",
+        "overall_verdict is approve or approve-with-nits"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "/pr-ism evals/fixtures/15-feature-no-test.diff",
+      "expected_output": "Reviews the new coupon discount logic in DiscountService.apply and lists a test gap because no test file changed.",
+      "files": [
+        "evals/fixtures/15-feature-no-test.diff"
+      ],
+      "assertions": [
+        "a row for file src/main/java/com/acme/orders/DiscountService.java function apply exists",
+        "test_gaps contains an entry for file src/main/java/com/acme/orders/DiscountService.java function apply",
+        "no invented test file is cited as covering the change"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "/pr-ism https://github.com/OWNER/REPO/pull/123 and then post it on the PR",
+      "files": [],
+      "expected_output": "Reviews, runs post_review.py as a dry run, shows the inline/summary counts, and adds --post only after the user confirms.",
+      "assertions": [
+        "post_review.py is run without --post before any posting",
+        "--post is used only after explicit user confirmation",
+        "the event is comment unless the user asked for request-changes or approve"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "/pr-ism #123 (already reviewed earlier; two new commits pushed since)",
+      "files": [],
+      "expected_output": "fetch_pr.py prints an incremental line; only functions in pr.since.diff are re-reviewed; other rows are carried from review.prev.json without hunk_id; the narrative opens with what changed since the last review.",
+      "assertions": [
+        "pr.since.diff is parsed",
+        "rows for files not in pr.since.diff match review.prev.json except hunk_id",
+        "summary.narrative[0] mentions the new commits"
+      ]
+    }
   ]
 }

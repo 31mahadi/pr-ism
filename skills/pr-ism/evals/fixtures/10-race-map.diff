@@ -1,0 +1,20 @@
+diff --git a/internal/cache/sessions.go b/internal/cache/sessions.go
+index 925ea75..d6f3006 100644
+--- a/internal/cache/sessions.go
++++ b/internal/cache/sessions.go
+@@ -12,15 +12,12 @@ type SessionCache struct {
+ type SessionCache struct {
+-	mu    sync.Mutex
+ 	items map[string]*Session
+ }
+ 
+ func (c *SessionCache) GetOrCreate(id string) *Session {
+-	c.mu.Lock()
+-	defer c.mu.Unlock()
+ 	if s, ok := c.items[id]; ok {
+ 		return s
+ 	}
+ 	s := newSession(id)
+ 	c.items[id] = s
+ 	return s
+ }

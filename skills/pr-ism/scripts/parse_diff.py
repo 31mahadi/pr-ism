@@ -33,7 +33,7 @@ LANG_BY_EXT = {
     ".tf": "terraform", ".dart": "dart", ".ex": "elixir", ".exs": "elixir", ".html": "html", ".css": "css", ".vue": "vue",
 }
 KIND_BY_PATH = [
-    (re.compile(r"(^|/)(test|tests|__tests__|spec|specs)/|_test\.\w+$|\.test\.\w+$|\.spec\.\w+$|Test\.\w+$"), "test"),
+    (re.compile(r"(^|/)(test|tests|__tests__|spec|specs|testdata|fixtures)/|\.txtar$|_test\.\w+$|\.test\.\w+$|\.spec\.\w+$|Test\.\w+$"), "test"),
     (re.compile(r"(^|/)(migrations?|db/migrate)/"), "migration"),
     (re.compile(r"\.(md|rst|txt|adoc)$|(^|/)docs?/"), "docs"),
     (re.compile(r"(^|/)(package\.json|go\.mod|Cargo\.toml|pyproject\.toml|requirements[^/]*\.txt|Gemfile|composer\.json|pom\.xml|build\.gradle(\.kts)?)$"), "deps"),
@@ -43,9 +43,9 @@ KIND_BY_PATH = [
 
 # Definition patterns: (language-or-*, regex with a `name` group)
 DEF_PATTERNS = [
-    ("go", re.compile(r"^\s*func\s+(?:\([^)]*\)\s*)?(?P<name>\w+)\s*[\[(]")),
+    ("go", re.compile(r"^\s*func\s+(?:\([^)]*\)\s*)?(?P<name>\w+)\s*[\[(]|^\s*type\s+(?P<name2>\w+)(?:\[[^\]]*\])?\s+(?:struct|interface)\b")),
     ("python", re.compile(r"^\s*(?:async\s+)?(?:def|class)\s+(?P<name>\w+)")),
-    ("javascript", re.compile(r"^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*(?P<name>\w+)|^\s*(?:export\s+)?(?:const|let|var)\s+(?P<name2>\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>|^\s*(?:export\s+)?(?:default\s+)?class\s+(?P<name3>\w+)|^\s*(?:public|private|protected|static|async|\s)*(?P<name4>\w+)\s*\([^)]*\)\s*(?::\s*[\w<>\[\]|, ]+)?\s*\{")),
+    ("javascript", re.compile(r"^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*(?P<name>\w+)|^\s*(?:export\s+)?(?:const|let|var)\s+(?P<name2>\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>|^\s*(?:export\s+)?(?:default\s+)?class\s+(?P<name3>\w+)|^\s*(?:public|private|protected|static|async|\s)*(?P<name4>\w+)\s*\([^)]*\)\s*(?::\s*[\w<>\[\]|, ]+)?\s*\{|^\s*(?:export\s+)?(?:declare\s+)?(?:interface|type|enum|namespace)\s+(?P<name5>\w+)")),
     ("typescript", None),  # same as javascript
     ("java", re.compile(r"^\s*(?:public|private|protected|static|final|abstract|synchronized|native|\s)*[\w<>\[\],.? ]+\s+(?P<name>\w+)\s*\([^;]*$|^\s*(?:public|private|protected|abstract|final|\s)*(?:class|interface|enum|record)\s+(?P<name2>\w+)")),
     ("kotlin", re.compile(r"^\s*(?:override\s+|private\s+|public\s+|internal\s+|suspend\s+|inline\s+|open\s+)*fun\s+(?:<[^>]+>\s*)?(?:[\w.]+\.)?(?P<name>\w+)\s*\(|^\s*(?:data\s+|sealed\s+|open\s+|abstract\s+)?(?:class|object|interface)\s+(?P<name2>\w+)")),
@@ -69,6 +69,9 @@ NOT_A_FUNCTION = {"if", "else", "elif", "while", "for", "foreach", "switch", "ca
                   "select", "defer", "go", "lock", "synchronized", "print", "require", "import", "super", "this", "self",
                   "constructor", "fn", "function", "def", "func", "class"}
 PREVIEW_CAP = 300
+TEST_BLOCK = re.compile(r"^\s*(?:describe|it|test|context|suite)(?:\.\w+)?\(\s*['\"`]([^'\"`]{1,80})")
+CONTAINER = re.compile(r"\b(class|struct|interface|impl|module|object|trait|enum|record|namespace|extension|protocol|defmodule|type)\b")
+GENERIC_DIRS = {"src", "lib", "app", "pkg", "internal", "cmd", "core", "main", "utils", "util", "common", "source", "sources", "."}
 DEF_KEYWORD = re.compile(r"\b(def|defp|defmacro|defmodule|func|fn|function|class|struct|interface|trait|enum|module|object|record|namespace|impl|extension|protocol|CREATE|ALTER|DROP)\b", re.I)
 
 
@@ -85,13 +88,15 @@ def kind_of(path: str) -> str:
 
 def def_name(line: str, lang: str) -> str | None:
     text = line[1:] if line[:1] in "+- " else line
+    if lang in ("javascript", "typescript") and (tb := TEST_BLOCK.match(text)):
+        return tb.group(1)
     for plang, rx in DEF_PATTERNS:
         if rx is None:
             continue
         if plang in (lang, "*") or (lang == "typescript" and plang == "javascript"):
             m = rx.match(text)
             if m:
-                for g in ("name", "name2", "name3", "name4"):
+                for g in ("name", "name2", "name3", "name4", "name5"):
                     if g in m.groupdict() and m.group(g):
                         name = m.group(g)
                         if text.lstrip().startswith(("}", ")", "]", "//", "#", "*", "/*")):
@@ -109,6 +114,8 @@ def header_func(context: str, lang: str) -> str | None:
     name = def_name(context, lang)
     if name:
         return name
+    if tb := TEST_BLOCK.search(context):
+        return tb.group(1)
     m = re.search(r"\b([A-Za-z_][\w$]*)\s*\(", context)
     return m.group(1) if m else None
 
@@ -167,14 +174,18 @@ def parse(diff_text: str) -> list[dict]:
 def segments(lines: list[dict], enclosing: str | None, lang: str) -> list[dict]:
     """Split a hunk at definition lines so each function gets its own line range + preview."""
     segs: list[dict] = []
-    cur = {"function": enclosing or "top-level", "lines": []}
+    cur = {"function": enclosing or "top-level", "lines": [], "indent": None, "container": True}
     for l in lines:
         name = def_name(l["text"], lang)
-        if name and name != cur["function"] and cur["lines"]:
-            segs.append(cur)
-            cur = {"function": name, "lines": []}
-        elif name and not cur["lines"]:
-            cur["function"] = name
+        indent = len(l["text"]) - len(l["text"].lstrip()) if name else 0
+        # a definition nested deeper inside a function (inner class, closure) belongs to that function
+        nested = name and cur["indent"] is not None and not cur["container"] and indent > cur["indent"]
+        if name and not nested:
+            container = bool(CONTAINER.search(l["text"].split(name, 1)[0]))
+            if name != cur["function"] and cur["lines"]:
+                segs.append(cur)
+                cur = {"function": name, "lines": []}
+            cur.update(function=name, indent=indent, container=container)
         cur["lines"].append(l)
     if cur["lines"]:
         segs.append(cur)
@@ -257,14 +268,16 @@ def enrich(files: list[dict], meta: dict, cfg: dict) -> dict:
                     h["enclosing_function"] = last_def
             h.setdefault("enclosing_function", last_def)
             h["definitions_touched"] = defs_touched
-            h["definitions_added"] = [d for d in defs_added if d not in defs_removed]
-            h["definitions_removed"] = [d for d in defs_removed if d not in defs_added]
+            h["definitions_added"] = list(dict.fromkeys(d for d in defs_added if d not in defs_removed))
+            h["definitions_removed"] = list(dict.fromkeys(d for d in defs_removed if d not in defs_added))
             h["definition_changed"] = sorted(set(defs_added) & set(defs_removed))
             h["segments"] = segments(h["lines"], enclosing, lang)
+            if f["kind"] == "test":
+                f.setdefault("_text", []).extend(l["text"] for l in h["lines"])
             h["preview"] = preview(h["lines"])
             h["line_count"] = len(h["lines"])
             del h["lines"]
-        f["functions"] = sorted({h["enclosing_function"] for h in f["hunks"] if h.get("enclosing_function")} | {d for h in f["hunks"] for d in h["definitions_touched"]})
+        f["functions"] = list(dict.fromkeys(sg["function"] for h in f["hunks"] for sg in h["segments"]))
         kept.append(f)
     test_stems = set()
     for f in kept:
@@ -272,10 +285,14 @@ def enrich(files: list[dict], meta: dict, cfg: dict) -> dict:
             stem = re.sub(r"(_test|\.test|\.spec|_spec|Test|Tests|Spec|test_)", "", Path(f["path"]).stem)
             test_stems.add(stem.lower())
             test_stems.add(str(Path(f["path"]).parent).lower())
+    test_text = "\n".join(f"{f['path']}\n" + "\n".join(f.pop("_text", [])) for f in kept if f["kind"] == "test").lower()
     for f in kept:
+        f.pop("_text", None)
         if f["kind"] == "source":
             stem = Path(f["path"]).stem.lower()
-            f["related_test_changed"] = stem in test_stems or str(Path(f["path"]).parent).lower() in test_stems
+            pkg = Path(f["path"]).parent.name.lower()
+            mentioned = [w for w in (stem, pkg) if len(w) > 2 and w not in GENERIC_DIRS and re.search(rf"\b{re.escape(w)}\b", test_text)]
+            f["related_test_changed"] = stem in test_stems or str(Path(f["path"]).parent).lower() in test_stems or bool(mentioned)
             f["tests_required"] = any(fnmatch(f["path"], g) or fnmatch("/" + f["path"], g) for g in cfg["review"]["require_tests_for"])
     stats = {
         "files": len(kept), "skipped": len(skipped), "hunks": sum(len(f["hunks"]) for f in kept),
@@ -329,10 +346,13 @@ def index_md(result: dict) -> str:
         lines.append(f"red paths: {', '.join(s['red_path_files'])}")
     if s["source_files_without_tests"]:
         lines.append(f"no related test change: {', '.join(s['source_files_without_tests'])}")
-    lines += ["", "| file | status | kind | red | +/- | functions (segments) | hunk ids |", "|---|---|---|---|---|---|---|"]
+    lines += ["", "| file | status | kind | red | +/- | functions [new lines] hunk |", "|---|---|---|---|---|---|"]
+    cap = 12
     for f in result["files"]:
-        segs = [f"{sg['function']} [{sg['new_range'][0]}-{sg['new_range'][1]}]" if sg.get("new_range") else sg["function"] for h in f["hunks"] for sg in h["segments"]]
-        lines.append(f"| {f['path']} | {f['status']} | {f['kind']} | {'yes' if f['red_path'] else ''} | +{f['additions']} -{f['deletions']} | {', '.join(segs) or '—'} | {', '.join(h['id'] for h in f['hunks'])} |")
+        segs = list(dict.fromkeys(f"{sg['function']} [{sg['new_range'][0]}-{sg['new_range'][1]}] {h['id']}" if sg.get("new_range") else f"{sg['function']} {h['id']}"
+                                  for h in f["hunks"] for sg in h["segments"]))
+        cell = ", ".join(segs[:cap]) + (f", +{len(segs) - cap} more (`show <path>`)" if len(segs) > cap else "")
+        lines.append(f"| {f['path']} | {f['status']} | {f['kind']} | {'yes' if f['red_path'] else ''} | +{f['additions']} -{f['deletions']} | {cell or '—'} |")
     if result["skipped"]:
         lines += ["", "skipped: " + ", ".join(x["path"] for x in result["skipped"])]
     return "\n".join(lines) + "\n"
@@ -349,17 +369,22 @@ def cmd_show(argv: list[str]) -> None:
         diff_text = Path(result["meta"]["diff_path"]).read_text(encoding="utf-8", errors="replace")
     full = {h_id: h for f in (parse(diff_text) if diff_text else []) for i, h in enumerate(f["hunks"]) for h_id in [f"{hashlib.sha1(f['path'].encode()).hexdigest()[:6]}-h{i + 1}"]}
     path, _, fn = want.partition(":")
+    found = False
     for f in result["files"]:
         for h in f["hunks"]:
             if h["id"] == want or f["path"] == path:
                 if fn:
                     for sg in h["segments"]:
                         if sg["function"] == fn:
+                            found = True
                             print(f"## {f['path']} :: {sg['function']}  lines {sg.get('new_range')}\n{sg['preview']}\n")
                     continue
+                found = True
                 body = full[h["id"]] if h["id"] in full else None
                 text = "\n".join(("+" if l["t"] == "+" else "-" if l["t"] == "-" else " ") + l["text"] for l in body["lines"]) if body else h["preview"]
                 print(f"## {f['path']} {h['id']}  @@ -{h['old_start']},{h['old_len']} +{h['new_start']},{h['new_len']} @@ {h['context']}\n{text}\n")
+    if not found:
+        sys.exit(f"no hunk or segment matches '{want}'; see changes.md for hunk ids and function names")
 
 
 def main(argv: list[str]) -> None:
@@ -383,9 +408,9 @@ def main(argv: list[str]) -> None:
     print(f"changes: {out}\nindex:   {idx}\nfiles: {s['files']} (+{s['skipped']} skipped)  hunks: {s['hunks']}  +{s['additions']} -{s['deletions']}")
     if s["red_path_files"]:
         print(f"red paths touched: {', '.join(s['red_path_files'])}")
-    for f in result["files"]:
-        fns = ", ".join(f["functions"][:6]) + (" …" if len(f["functions"]) > 6 else "")
-        print(f"  [{f['status'][:3]}] {f['path']}  ({f['kind']}, {f['language']})  +{f['additions']} -{f['deletions']}  fn: {fns or '—'}")
+    if s["source_files_without_tests"]:
+        print(f"no related test change: {', '.join(s['source_files_without_tests'])}")
+    print("next: read changes.md")
 
 
 if __name__ == "__main__":

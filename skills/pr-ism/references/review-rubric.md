@@ -34,10 +34,12 @@ This rates the **nature and blast radius of the logical change**, not whether it
 - rename/move with every reference updated in the same PR
 - dead code removal, unused import removal
 - pure refactor where you can verify inputs → outputs are unchanged from the diff alone
+- one-line pass-through of a new optional value to an existing call (the decision lives elsewhere; rate that row instead)
 
 **🟡 amber — intended, bounded behaviour change**
 - new feature path, new endpoint, new field that is optional / has a default
 - changed conditional, default value, return value, error message, sort order
+- a bug fix that changes a conditional or return path, even when clearly correct
 - new dependency or bumped major version
 - performance change that alters timing or memory but not results
 - backward-compatible API addition
@@ -66,10 +68,12 @@ Applies to the *problem you found*, not the change size. A red-path change with 
 |---|---|
 | `info` | nothing wrong; row exists for navigation and context |
 | `low` | style, naming, minor clarity, optional improvement |
-| `medium` | likely bug in an edge case, missing test, unclear contract, minor perf regression |
+| `medium` | likely bug in an edge case, unclear contract, minor perf regression |
 | `high` | probable bug on the main path, data inconsistency, security weakness, notable perf regression |
 | `critical` | data loss, security hole, outage risk, money handled incorrectly, breaks callers |
 
+A missing test goes in `test_gaps`, not into a row's severity.
+Severity `medium` or higher needs a verdict other than `lgtm` (the renderer warns when they contradict).
 The configured `severity_scale` may differ; always use the labels from the effective config.
 
 ## 4. impact — how far does this row reach?
@@ -97,8 +101,9 @@ The configured `severity_scale` may differ; always use the labels from the effec
 ## Writing the cells
 
 - `what`: one concrete sentence, before → after. "Retries now cap at 3 (was unbounded) and back off 200ms" beats "improved retry logic".
-- `why`: the consequence for a reader who has not seen the diff: who is affected, what could break, what to double-check.
+- `why`: the consequence for a reader who has not seen the diff: who is affected, what could break, what to double-check. Leave it out on `lgtm`/`info` rows rather than writing filler.
 - `notes`: evidence — the line, the caller, the assumption. Quote identifiers, not whole hunks.
 - `suggestion`: an actionable fix or a specific test to add. Skip it if there is nothing to suggest.
 - Never invent a function name. If the parser gives no `enclosing_function` and reading the file does not settle it, use the nearest named scope (class, module, "top-level") and say so in `notes`.
-- Prefer fewer, sharper rows over one row per hunk: merge hunks that touch the same function.
+- Prefer fewer, sharper rows over one row per hunk: merge hunks that touch the same function, and list them all in `hunk_ids`.
+- Amber is the default for real changes, so make `what` carry the difference: a reader should tell a one-argument pass-through from a new code path without opening the diff.

@@ -1,0 +1,17 @@
+diff --git a/services/sync/importer.py b/services/sync/importer.py
+index 5a68b82..62fd9f4 100644
+--- a/services/sync/importer.py
++++ b/services/sync/importer.py
+@@ -22,10 +22,10 @@ def import_batch(rows):
+ def import_batch(rows):
+     imported = 0
+     for row in rows:
+         try:
+             record = parse_row(row)
+             repo.upsert(record)
+             imported += 1
+-        except ValueError as exc:
+-            log.warning("skipping malformed row %s: %s", row.get("id"), exc)
++        except Exception:
++            pass
+     return imported

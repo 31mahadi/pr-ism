@@ -76,13 +76,32 @@ def fill(review: dict, changes: dict | None, cfg: dict) -> dict:
         for k in ("url", "repo", "number", "author", "base", "head", "head_sha", "provider", "web_base", "root"):
             meta.setdefault(k, changes.get("meta", {}).get(k))
     meta.setdefault("generated_at", dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
-    meta.setdefault("reviewer", "pr-ism 1.2")
+    meta.setdefault("reviewer", "pr-ism")
     meta["config_hash"] = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:8]
     by_path = {f["path"]: f for f in (changes or {}).get("files", [])}
     from parse_diff import build_link  # noqa: WPS433
     for i, r in enumerate(review["rows"]):
         r.setdefault("id", f"r{i + 1}")
+        for k in ("line_start", "line_end", "additions", "deletions"):
+            if isinstance(r.get(k), str) and r[k].isdigit():
+                r[k] = int(r[k])
         f = by_path.get(r["file"])
+        if r["file"].endswith("/") and changes:
+            # directory summary row: totals over the files under it, link to the PR's file list
+            under = [x for p, x in by_path.items() if p.startswith(r["file"])]
+            r.setdefault("additions", sum(x["additions"] for x in under)); r.setdefault("deletions", sum(x["deletions"] for x in under))
+            if changes["meta"].get("url"):
+                r.setdefault("file_link", changes["meta"]["url"] + ("/files" if changes["meta"].get("provider") == "github" else "/diffs"))
+            continue
+        if f and r.get("hunk_ids"):
+            # one row merged from several hunks of the same function
+            hs = [h for h in f["hunks"] if h["id"] in r["hunk_ids"]]
+            if hs:
+                r.setdefault("file_link", (f.get("link") or {}).get("href")); r.setdefault("review_link", (f.get("link") or {}).get("review_href"))
+                r.setdefault("line_start", min(h["new_range"][0] for h in hs)); r.setdefault("line_end", max(h["new_range"][1] for h in hs))
+                r.setdefault("additions", sum(h["additions"] for h in hs)); r.setdefault("deletions", sum(h["deletions"] for h in hs))
+                if cfg["report"].get("show_diff_snippets", True):
+                    r.setdefault("diff_snippet", "\n⋯\n".join(h["preview"] for h in hs))
         if f:
             r.setdefault("file_link", (f.get("link") or {}).get("href"))
             r.setdefault("review_link", (f.get("link") or {}).get("review_href"))
@@ -125,6 +144,16 @@ def fill(review: dict, changes: dict | None, cfg: dict) -> dict:
     review["render"] = {"sections": cfg["report"]["sections"], "columns": cfg["report"]["columns"], "group_by": cfg["report"]["group_by"],
                         "sort": cfg["report"]["sort"], "severity_scale": cfg["severity_scale"]}
     return review
+
+
+def warnings(review: dict, cfg: dict) -> list[str]:
+    """Contradictions worth a second look; they do not block rendering."""
+    scale, out = cfg["severity_scale"], []
+    mid = scale[len(scale) // 2] if scale else None
+    for i, r in enumerate(review.get("rows") or []):
+        if mid and r.get("verdict") == (cfg["verdicts"][0] if cfg.get("verdicts") else "lgtm") and r.get("severity") in scale and scale.index(r["severity"]) >= scale.index(mid):
+            out.append(f"rows[{i}] ({r.get('file')}::{r.get('function')}): severity '{r['severity']}' with verdict '{r['verdict']}'. Lower the severity or change the verdict")
+    return out
 
 
 def to_markdown(review: dict, cfg: dict) -> str:
@@ -201,12 +230,15 @@ def main(argv: list[str]) -> None:
         sys.exit(1)
     if "--validate-only" in argv:
         print("review.json is valid"); return
+    for w in warnings(review, cfg):
+        print(f"warning: {w}")
     review = fill(review, changes, cfg)
     fmt = argv[argv.index("--format") + 1] if "--format" in argv else cfg["output"]["format"]
     explicit = Path(argv[argv.index("--out") + 1]) if "--out" in argv else None
     written = []
     if fmt in ("html", "both"):
-        data = json.dumps(review).replace("</", "<\\/")
+        public = {**review, "meta": {k: v for k, v in review["meta"].items() if k not in ("root", "diff_path")}}  # no local paths in a shareable file
+        data = json.dumps(public).replace("</", "<\\/")
         html = TEMPLATE.read_text(encoding="utf-8").replace("__PRISM_DATA__", data).replace("__PRISM_TITLE__", review["meta"]["title"].replace("<", "&lt;"))
         p = explicit if explicit and explicit.suffix == ".html" else output_path(review, cfg, ".html")
         p.parent.mkdir(parents=True, exist_ok=True); p.write_text(html, encoding="utf-8"); written.append(p)
