@@ -33,7 +33,7 @@ DEFAULTS_PATH = HERE.parent / "assets" / "default-config.json"
 
 ENUMS = {
     "output.format": ["html", "markdown", "both"],
-    "report.group_by": ["file", "severity", "logical", "change_type", "none"],
+    "report.group_by": ["path", "file", "severity", "logical", "change_type", "none"],
     "report.sort": ["severity_desc", "severity_asc", "file", "logical", "none"],
     "report.tone": ["concise", "detailed"],
     "links.style": ["auto", "github", "gitlab", "custom", "vscode", "file", "relative"],
@@ -46,6 +46,7 @@ LIST_ENUMS = {
     "report.columns": [
         "file",
         "function",
+        "shape",
         "change_type",
         "logical",
         "what",
@@ -73,8 +74,8 @@ DOCS = {
     "output.filename": "Filename pattern. Tokens: {repo} {id} {date} {branch}.",
     "output.open": "Open the HTML report after rendering (Claude Code only).",
     "report.sections": "Which sections appear, in order.",
-    "report.columns": "Table columns, in order.",
-    "report.group_by": "Group table rows by file, severity, logical (RAG), change_type, or none.",
+    "report.columns": "Table columns, in order. shape = diff bar, +/- counts, findings badge and tests tick.",
+    "report.group_by": "Group table rows: path (the review path: load-bearing, blockers, red paths, tests, the rest), file, severity, logical (RAG), change_type, or none.",
     "report.sort": "Row order inside a group.",
     "report.language": "Language for narrative text (ISO code, e.g. en, bn, ja).",
     "report.tone": "concise = one line per cell; detailed = fuller explanations.",

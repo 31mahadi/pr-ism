@@ -37,8 +37,8 @@ valid options — surface that message to the user verbatim.
 | key | default | effect |
 |---|---|---|
 | `report.sections` | summary, risk_overview, table, findings, test_gaps, questions | which sections render, in order |
-| `report.columns` | file, function, change_type, logical, what, verdict, severity | table columns, in order; extras: `why`, `impact`, `lines` |
-| `report.group_by` | `file` | `file` · `severity` · `logical` · `change_type` · `none` (user can regroup live in the HTML) |
+| `report.columns` | file, function, shape, change_type, logical, what, verdict, severity | table columns, in order; `shape` = diff bar, +/− counts, findings badge, tests tick; extras: `why`, `impact`, `lines` |
+| `report.group_by` | `path` | `path` (the review path: ① load-bearing ② blockers ③ red paths judged ok ④ tests ⑤ the rest, each with a time estimate) · `file` · `severity` · `logical` · `change_type` · `none` (user can regroup live in the HTML) |
 | `report.sort` | `severity_desc` | order inside each group: `severity_desc` `severity_asc` `file` `logical` `none` |
 | `report.language` | `en` | language of `what` / `why` / narrative (identifiers stay as-is) |
 | `report.tone` | `concise` | `concise` one-line cells · `detailed` fuller `why`/`notes`, 2–4 narrative paragraphs |

@@ -7,8 +7,9 @@ Usage: merge_findings.py <review.json> --changes changes.json --agents agent-fin
 - agent-findings.jsonl: one JSON object per line
   {agent, file, line, severity, title, detail, suggestion, confidence}
 - Drops findings below review.min_agent_confidence (a finding with no confidence is kept).
-- Dedupes near-identical findings (same file, lines within 3, similar title), including against
-  findings Claude already wrote; the survivor records every agent in `also_found_by`.
+- Dedupes near-identical findings (same file, lines within 3, and a similar title or the same
+  severity), including against findings Claude already wrote; the survivor records every agent
+  in `also_found_by`.
 - Maps agent severities onto the configured severity_scale.
 - Attaches each finding to the row whose segment range (changes.json) contains its line via
   `row_ids`, and raises that row's severity, and its verdict when the new severity warrants it.
@@ -52,6 +53,7 @@ LADDER = {
 TEST_AGENTS = {"pr-test-analyzer"}
 LINE_SLACK = 3
 TITLE_SIMILARITY = 0.6
+WORD_OVERLAP = 0.4
 
 
 def map_severity(value: object, scale: list[str]) -> str:
@@ -82,6 +84,15 @@ def load_agent_findings(path: Path) -> tuple[list[dict], int]:
     return out, bad
 
 
+def word_overlap(a: str, b: str) -> float:
+    """Share of content words (4-char stems) the shorter title has in common with the longer."""
+    wa = {w[:4] for w in a.lower().split() if len(w) >= 3}
+    wb = {w[:4] for w in b.lower().split() if len(w) >= 3}
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / min(len(wa), len(wb))
+
+
 def similar(a: dict, b: dict) -> bool:
     if (a.get("file") or "") != (b.get("file") or ""):
         return False
@@ -91,7 +102,14 @@ def similar(a: dict, b: dict) -> bool:
     if isinstance(la, int) != isinstance(lb, int):
         return False
     ratio = difflib.SequenceMatcher(None, a["title"].lower(), b["title"].lower()).ratio()
-    return ratio >= TITLE_SIMILARITY
+    if ratio >= TITLE_SIMILARITY:
+        return True
+    # same spot, same severity, some shared words: two reviewers describing one issue differently
+    return (
+        isinstance(la, int)
+        and a.get("severity") == b.get("severity")
+        and word_overlap(a["title"], b["title"]) >= WORD_OVERLAP
+    )
 
 
 def row_ranges(row: dict, by_path: dict) -> list[tuple[int, int]]:
@@ -146,7 +164,18 @@ def merge(review: dict, changes: dict, agent_findings: list[dict], cfg: dict) ->
             taken.add(r["id"])
 
     # findings from a previous merge (or carried over from review.prev.json) stay; a rerun dedupes against them
-    findings = list(review.get("findings") or [])
+    findings: list[dict] = []
+    for f in review.get("findings") or []:
+        # findings already in the file may duplicate each other (a prism one restating an agent's)
+        dup = next((k for k in findings if similar(k, f)), None)
+        if dup is None:
+            findings.append(f)
+            continue
+        for src in [f.get("source") or "prism", *(f.get("also_found_by") or [])]:
+            if src != dup.get("source", "prism") and src not in dup.setdefault("also_found_by", []):
+                dup["also_found_by"].append(src)
+        if f.get("row_ids") and not dup.get("row_ids"):
+            dup["row_ids"] = f["row_ids"]
     gaps = list(review.get("test_gaps") or [])
     for f in findings:
         f.setdefault("source", "prism")
@@ -174,14 +203,6 @@ def merge(review: dict, changes: dict, agent_findings: list[dict], cfg: dict) ->
         if isinstance(conf, (int, float)):
             f["confidence"] = conf
         f = {k: v for k, v in f.items() if v not in (None, "")}
-        dup = next((k for k in findings + kept if similar(k, f)), None)
-        if dup is not None:
-            stats["duplicates"] += 1
-            if f["source"] != dup["source"] and f["source"] not in dup.get("also_found_by", []):
-                dup.setdefault("also_found_by", []).append(f["source"])
-            if rank[f["severity"]] > rank.get(dup["severity"], 0) and dup["source"] != "prism":
-                dup["severity"] = f["severity"]
-            continue
         if agent in TEST_AGENTS:
             row = match_row(f, rows, by_path)
             gap = {
@@ -197,6 +218,14 @@ def merge(review: dict, changes: dict, agent_findings: list[dict], cfg: dict) ->
             if not any(g.get("file") == gap.get("file") and g.get("reason") == gap["reason"] for g in gaps):
                 gaps.append(gap)
                 stats["test_gaps"] += 1
+            continue
+        dup = next((k for k in findings + kept if similar(k, f)), None)
+        if dup is not None:
+            stats["duplicates"] += 1
+            if f["source"] != dup["source"] and f["source"] not in dup.get("also_found_by", []):
+                dup.setdefault("also_found_by", []).append(f["source"])
+            if rank[f["severity"]] > rank.get(dup["severity"], 0) and dup["source"] != "prism":
+                dup["severity"] = f["severity"]
             continue
         kept.append(f)
 

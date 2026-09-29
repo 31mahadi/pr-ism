@@ -81,4 +81,5 @@ scale (it never sets `blocking`), turns `pr-test-analyzer` findings into `test_g
 every finding with `source`. Findings that match no row stay top-level. It is safe to rerun.
 
 If it prints `rows raised`, re-read `summary.overall_verdict`, `one_liner` and `narrative` and make
-them match the raised rows before rendering.
+them match the raised rows before rendering. The merge also folds duplicates already in the file
+(a prism finding restating an agent's at the same line), so it is safe to rerun.

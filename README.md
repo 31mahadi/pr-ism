@@ -23,12 +23,17 @@ which works when the skill is installed without the plugin (manual copy or `npx 
 /pr-ism config                            # customise output
 ```
 
-The report contains:
+The report is built around how experienced reviewers read a change (the reasoning is in
+[docs/report-v2-design.md](docs/report-v2-design.md)):
 
-- **Summary**: verdict, one-liner, themes
-- **Spectrum bar**: share of 🟢 no behaviour change, 🟡 intended change, 🔴 high blast radius
-- **Changes by function**: file, function, change type, rating, what changed, verdict, severity, diff hunk
-- **Findings**, **test gaps**, **questions for the author**
+- **Decide strip**: verdict, the one reason, and "start here" — the load-bearing rows and the worst findings, linked
+- **Shape strip**: one tile per directory, sized by lines changed and coloured 🟢 no behaviour change / 🟡 intended change / 🔴 high blast radius; click to filter
+- **Review path**: the function-level table ordered ① load-bearing ② blockers ③ red paths judged ok ④ tests ⑤ everything else, each with a time estimate at 400 lines an hour; tick rows as you go
+- **Rows**: file, function, shape (diff bar, +/−, findings badge, tests tick), change type, rating, what changed, verdict, severity; expand for the attached findings and the diff
+- **Findings** with Agree / Not an issue / Fixed, **test gaps**, **questions for the author**; *Copy decisions* hands your verdicts back to Claude for posting
+
+After the review, Claude prints a 12-line card with clickable `file:line` links. Then say `walk` for a guided pass
+station by station, `show 3` to see one diff, `fix 1` to have finding 1 fixed (applied only after you say yes), or `post`.
 
 Markdown output is also available (`output.format`).
 

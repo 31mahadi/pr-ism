@@ -17,7 +17,9 @@ Fields marked ● are required.
       "The PR replaces the unbounded retry loop in `handleWebhook` with a 3-attempt exponential backoff and stores an idempotency key per event.",
       "Two things need attention before merge: the cap is not configurable and there is no dead-letter path, and the new `webhook_events` migration is not reversible."
     ],
-    "themes": ["retries", "idempotency", "migration"]   // 2–6 tags
+    "themes": ["retries", "idempotency", "migration"],   // 2–6 tags
+    "load_bearing": ["r1"],                     // 1–3 row ids the rest of the PR depends on; the report opens with them
+    "verify": ["POST a webhook with a 3s provider delay; expect a billing.dlq message, not a drop"]  // up to 3 checks
   },
   "risk_overview": {                             // each list may be empty; strings or {text, file, line}
     "red_paths_touched": ["internal/billing/webhook.go"],
@@ -71,6 +73,29 @@ Fields marked ● are required.
 
 `line_start`, `line_end`, `additions` and `deletions` are integers. Omit `source` on findings you
 write; it defaults to `prism`. `test_gaps` entries may carry `source` too.
+
+## What the renderer adds
+
+`render_report.py` fills these in; do not write them yourself:
+
+- row `id` (`r1`…), `hunk_hash` (the reviewed-tick key; a changed hunk clears the tick), `tests`
+  (a test changed with the file), `station` (1–5: load-bearing, blockers, red paths judged ok,
+  tests, everything else; from `load_bearing`, verdicts, attached findings and RAG)
+- finding `id` (`f1`… in list order; the same numbering `post_review.py` and the chat modes use)
+  and `row_ids` by line when you left them out
+- `summary.stats.minutes` and `sessions` (400 lines an hour; green rows skimmed; directory
+  summaries a glance each), `render_stations`, `render.dirs` (the shape strip)
+- `summary.resolved_findings` on a repeat review: findings from `review.prev.json` that are gone
+
+## decisions.json
+
+Reviewer decisions, from the report's **Copy decisions** button or collected in chat:
+
+```json
+{"head_sha": "…", "reviewed": ["r1", "r4"], "decisions": {"f1": {"state": "agree"}, "f3": {"state": "dismiss", "note": "guarded upstream"}, "f5": {"state": "fixed"}}}
+```
+
+`post_review.py --decisions` leaves out dismissed findings and lists fixed ones as already addressed.
 
 ## agent-findings.jsonl (toolkit engine only)
 

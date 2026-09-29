@@ -18,13 +18,14 @@
     "columns": [
       "file",
       "function",
+      "shape",
       "change_type",
       "logical",
       "what",
       "verdict",
       "severity"
     ],
-    "group_by": "file",
+    "group_by": "path",
     "sort": "severity_desc",
     "language": "en",
     "tone": "concise",

@@ -2,7 +2,7 @@
 """Post a finished review back to the PR as comments.
 
 Usage: post_review.py <review.json> --changes changes.json [--post] [--event comment|request-changes|approve]
-                      [--min-severity SEV] [--out payload.json]
+                      [--min-severity SEV] [--decisions decisions.json] [--out payload.json]
 
 Without --post it only prints what would be posted (dry run) and writes the payload.
 
@@ -15,6 +15,8 @@ Other providers (local branch, patch): nothing to post to — exits 1.
 Inline comments are made for findings, and for rows whose verdict is needs-changes, blocking or
 question, at or above --min-severity (default: the second-lowest configured severity).
 The review event defaults to `comment`; it never approves or requests changes unless asked.
+--decisions takes the JSON the report's "Copy decisions" button produces ({"decisions": {"f3": {"state": …}}}):
+findings marked `dismiss` are left out, `fixed` ones are listed as already addressed, the rest post as usual.
 """
 
 from __future__ import annotations
@@ -47,13 +49,30 @@ def in_diff(by_path: dict, path: str, line: int | None) -> bool:
     )
 
 
-def collect(review: dict, changes: dict, cfg: dict, min_sev: str) -> tuple[list[dict], list[str]]:
-    """Return (inline comments, overflow bullets that could not be placed on a diff line)."""
+def finding_ids(findings: list[dict]) -> None:
+    """Same numbering as render_report.py: f1, f2, … in list order, keeping ids already set."""
+    taken = {f["id"] for f in findings if f.get("id")}
+    n = 0
+    for f in findings:
+        if not f.get("id"):
+            n += 1
+            while f"f{n}" in taken:
+                n += 1
+            f["id"] = f"f{n}"
+            taken.add(f["id"])
+
+
+def collect(
+    review: dict, changes: dict, cfg: dict, min_sev: str, decisions: dict | None = None
+) -> tuple[list[dict], list[str], list[str]]:
+    """Return (inline comments, overflow bullets that could not be placed on a diff line, fixed bullets)."""
     scale = cfg["severity_scale"]
     rank = {s: i for i, s in enumerate(scale)}
     floor = rank.get(min_sev, 0)
     by_path = {f["path"]: f for f in changes.get("files", [])}
-    inline, overflow, seen = [], [], set()
+    inline, overflow, fixed, seen = [], [], [], set()
+    decisions = decisions or {}
+    finding_ids(review.get("findings") or [])
 
     def place(path: str | None, line: int | None, body: str, bullet: str) -> None:
         if path and in_diff(by_path, path, line) and (path, line) not in seen:
@@ -64,6 +83,12 @@ def collect(review: dict, changes: dict, cfg: dict, min_sev: str) -> tuple[list[
 
     for f in review.get("findings") or []:
         if rank.get(f["severity"], 0) < floor:
+            continue
+        state = (decisions.get(f["id"]) or {}).get("state")
+        if state == "dismiss":
+            continue
+        if state == "fixed":
+            fixed.append(f"- {f['title']}" + (f" (`{f['file']}`)" if f.get("file") else ""))
             continue
         src = f" _({f['source']})_" if str(f.get("source", "")).startswith("toolkit:") else ""
         body = f"**{f['severity']}: {f['title']}**{src}\n\n{f.get('detail', '')}".strip()
@@ -87,10 +112,10 @@ def collect(review: dict, changes: dict, cfg: dict, min_sev: str) -> tuple[list[
             body,
             f"- **{r['verdict']}** `{r['file']}` · `{r.get('function') or 'top-level'}`: {r['what']}",
         )
-    return inline, overflow
+    return inline, overflow, fixed
 
 
-def summary_body(review: dict, overflow: list[str], report_note: str | None) -> str:
+def summary_body(review: dict, overflow: list[str], report_note: str | None, fixed: list[str] | None = None) -> str:
     s = review["summary"]
     st = s.get("stats", {})
     rows = review["rows"]
@@ -107,6 +132,8 @@ def summary_body(review: dict, overflow: list[str], report_note: str | None) -> 
         out += ["", p]
     if overflow:
         out += ["", "**Findings not attached to a diff line**", *overflow]
+    if fixed:
+        out += ["", "**Already addressed**", *fixed]
     if review.get("test_gaps"):
         out += ["", "**Test gaps**"] + [
             f"- `{g['file']}`{' · ' + g['function'] if g.get('function') else ''}: {g['reason']}"
@@ -151,17 +178,26 @@ def main(argv: list[str]) -> None:
     from render_report import fill  # noqa: E402
 
     review = fill(review, changes, cfg)
-    inline, overflow = collect(review, changes, cfg, min_sev)
+    decisions = None
+    if "--decisions" in argv:
+        raw = json.loads(Path(argv[argv.index("--decisions") + 1]).read_text(encoding="utf-8"))
+        decisions = raw.get("decisions", raw)
+        if raw.get("head_sha") and meta.get("head_sha") and raw["head_sha"] != meta["head_sha"]:
+            print(f"warning: decisions were made on {raw['head_sha'][:10]}, this review is of {meta['head_sha'][:10]}")
+    inline, overflow, fixed = collect(review, changes, cfg, min_sev, decisions)
     provider, number, repo = meta.get("provider"), meta.get("number"), meta.get("repo")
 
     if provider == "github":
-        payload = {"body": summary_body(review, overflow, None), "event": EVENTS[event], "comments": inline}
+        payload = {"body": summary_body(review, overflow, None, fixed), "event": EVENTS[event], "comments": inline}
         if meta.get("head_sha"):
             payload["commit_id"] = meta["head_sha"]
     elif provider == "gitlab":
         payload = {
             "body": summary_body(
-                review, overflow + [f"- `{c['path']}:{c['line']}`: {c['body'].splitlines()[0]}" for c in inline], None
+                review,
+                overflow + [f"- `{c['path']}:{c['line']}`: {c['body'].splitlines()[0]}" for c in inline],
+                None,
+                fixed,
             )
         }
         inline = []
@@ -171,7 +207,10 @@ def main(argv: list[str]) -> None:
     out = Path(argv[argv.index("--out") + 1]) if "--out" in argv else Path(argv[0]).with_name("comments.json")
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     target = f"{repo}#{number}" if provider == "github" else f"{repo}!{number}"
-    print(f"target: {target}  event: {event}  inline comments: {len(inline)}  in summary only: {len(overflow)}")
+    print(
+        f"target: {target}  event: {event}  inline comments: {len(inline)}  in summary only: {len(overflow)}"
+        + (f"  already fixed: {len(fixed)}" if fixed else "")
+    )
     print(f"payload: {out}")
     if "--post" not in argv:
         print("dry run: nothing posted (add --post to send)")

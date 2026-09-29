@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs python3 (3.9+) and git. GitHub PRs use the gh CLI, else the REST API (GITHUB_TOKEN for private), else a git fetch of refs/pull/N/head from inside the clone; GitLab MRs use glab or refs/merge-requests/N/head. Other providers work via a local branch, commit range or patch file. The HTML report is self-contained and works offline. In Claude Code, optionally uses the pr-review-toolkit plugin's agents for detection (review.engine).
 metadata:
   author: Mahadi Hassan <01.mahadi@gmail.com>
-  version: "1.6.0"
+  version: "1.7.0"
 ---
 
 # pr-ism
@@ -19,6 +19,7 @@ path of this SKILL.md). Run every script with `python3`.
 Decide the mode from `$ARGUMENTS` (or the user's message when there are no arguments):
 
 - starts with `config` → **Configure** (below)
+- `walk`, `show N`, `fix N`, `post`, `next`, `done` after a review → **Follow up** (below)
 - anything else (URL, `#123`, branch, range, patch path, or nothing) → **Review**
 
 ---
@@ -108,7 +109,8 @@ prism (always on claude.ai), everything below is the whole review.
 ### 5. Write `review.json`
 Follow `references/review-schema.md` exactly. Write it to `.pr-ism/work/<id>/review.json`.
 Use `hunk_id` from `changes.json` on every row so the renderer can attach lines, links and the
-diff snippet. Use only the severity and verdict labels from the effective config. Narrative
+diff snippet. Name the one to three `summary.load_bearing` rows (the design core the rest depends
+on) and up to three `summary.verify` steps; the report opens with them. Use only the severity and verdict labels from the effective config. Narrative
 language and tone come from `report.language` and `report.tone`.
 
 With the toolkit engine, merge the agent findings into it before rendering:
@@ -123,17 +125,19 @@ python3 $SKILL/scripts/render_report.py .pr-ism/work/<id>/review.json --changes 
 ```
 If validation fails it prints every problem; fix `review.json` and rerun rather than editing the
 HTML. `warning:` lines flag contradictions (e.g. a `medium` row marked `lgtm`); fix them unless you
-meant it. The script prints the report path and a one-line verdict summary.
+meant it. The script prints the report path and a one-line verdict summary. The report orders rows
+into a review path (load-bearing → blockers → red paths judged ok → tests → the rest) with a time
+estimate per station, and lets the reviewer tick rows and decide on findings in the browser.
 
 ### 7. Deliver
 - **Claude Code / a terminal**: print the report path (already opened if `output.open` is true).
 - **claude.ai, Cowork or any UI with file delivery**: present or publish the HTML file so the user
   can open it in place. Never paste the HTML into the chat.
 
-Then give a chat summary of at most six lines: overall verdict, 🟢/🟡/🔴 counts, the two or three
-findings that matter most with file:line, the engine used (and findings per source with the
-toolkit), and any question you need answered. Do not repeat the
-whole table in chat — the report is the table.
+Then print the **review card** from `references/chat-modes.md`: at most 12 lines, verdict and
+reason first, the shape line, the load-bearing links, the top findings numbered with clickable
+`[file:line](path#Lline)` links, the tail counts, the report path, and the next actions
+(`walk`, `fix N`, `show N`, `post`). Do not repeat the table in chat — the report is the table.
 
 ### 8. Post to the PR (only when asked)
 For a GitHub PR or GitLab MR, offer once to post the review as PR comments. Run a dry run first
@@ -145,6 +149,16 @@ It builds one review: a summary body plus inline comments for findings and for
 `needs-changes`/`blocking`/`question` rows on lines inside the diff (the rest go in the body).
 Add `--post` only after the user says yes. It posts as a plain comment; pass
 `--event request-changes` or `--event approve` only when the user asks for that. GitLab gets one MR note.
+
+---
+
+## Follow up (`walk`, `show N`, `fix N`, `post`)
+
+After a review, these act on `.pr-ism/work/<id>/review.json` instead of reviewing again; the
+details are in `references/chat-modes.md`. `walk` takes the reviewer through the review path one
+station at a time with links; `show N` prints one row's or finding's diff; `fix N` proposes the
+smallest change for finding N as a diff and applies it only after a yes; `post` sends the review
+to the PR, honouring the decisions collected in chat or copied from the report.
 
 ---
 

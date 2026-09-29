@@ -90,6 +90,16 @@ The configured `severity_scale` may differ; always use the labels from the effec
 | `needs-changes` | should be fixed before merge |
 | `blocking` | must not merge as is (usually paired with `high`/`critical`) |
 
+## Load-bearing change and how to verify (summary.load_bearing, summary.verify)
+
+`load_bearing`: the ids of the one to three rows the rest of the PR depends on — the design core
+(a new lifecycle, a changed data model, the function every other change calls). A reviewer reads
+these first; if the design is wrong the rest is wasted. Pick by dependency, not by severity: a
+green row can be load-bearing. Omit when nothing stands out (a flat set of independent edits).
+
+`verify`: up to three concrete steps a reviewer can run to check the change does what it says
+(an input and the expected outcome), like a test plan. Omit rather than invent.
+
 ## Overall verdict (summary.overall_verdict)
 
 - any `blocking` → `request-changes`

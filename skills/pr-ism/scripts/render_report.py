@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from config import effective as effective_config  # noqa: E402
 from config import git_root  # noqa: E402
+from merge_findings import match_row  # noqa: E402
 
 TEMPLATE = HERE.parent / "assets" / "report-template.html"
 LOGICAL = {"green", "amber", "red"}
@@ -51,6 +52,16 @@ CHANGE_TYPES = {
 }
 IMPACTS = {"local", "module", "service", "system"}
 ROW_REQUIRED = ("file", "change_type", "logical", "what", "verdict", "severity")
+LOC_PER_HOUR = 400  # SmartBear/Cisco: defect detection drops past ~400 lines an hour
+SKIM_FACTOR = 4  # green, lgtm rows are skimmed, not read
+DIR_ROW_MINUTES = 2  # a directory summary row is glanced at, not read line by line
+STATIONS = [
+    ("Load-bearing", "the change the rest depends on; if the design is wrong, stop here"),
+    ("Blockers", "rows that need changes, or carry a finding or severity at or above the middle of the scale"),
+    ("Red paths, ok", "risky paths pr-ism rated fine; confirm the judgement rather than skip it"),
+    ("Tests", "what the tests say the change is meant to do, and where they are missing"),
+    ("Everything else", "green and amber rows with nothing attached"),
+]
 
 
 def validate(review: dict, cfg: dict) -> list[str]:
@@ -68,6 +79,9 @@ def validate(review: dict, cfg: dict) -> list[str]:
     if not isinstance(rows, list) or not rows:
         errs.append("rows must be a non-empty list")
         return errs
+    for k in ("load_bearing", "verify"):
+        if k in s and not (isinstance(s[k], list) and all(isinstance(x, str) for x in s[k])):
+            errs.append(f"summary.{k} must be a list of strings")
     for i, r in enumerate(rows):
         where = f"rows[{i}]" + (f" ({r.get('file')}::{r.get('function')})" if isinstance(r, dict) else "")
         if not isinstance(r, dict):
@@ -196,13 +210,26 @@ def fill(review: dict, changes: dict | None, cfg: dict) -> dict:
         st.setdefault("skipped", changes["stats"]["skipped"])
     for k in ("green", "amber", "red"):
         st[k] = sum(1 for r in rows if r["logical"] == k)
+    finding_ids(review)
     for fnd in review.get("findings") or []:
+        if changes and not fnd.get("row_ids") and fnd.get("file"):
+            row = match_row(fnd, rows, by_path)
+            if row is not None:
+                fnd["row_ids"] = [row["id"]]
         f = by_path.get(fnd.get("file", ""))
         if f and not fnd.get("link"):
             fnd["link"] = build_link(
                 fnd["file"], fnd.get("line"), None, changes["meta"], cfg["links"], changes["meta"].get("root") or "."
             ).get("href")
+    for r in rows:
+        f = by_path.get(r["file"])
+        if f is not None:
+            r.setdefault("tests", bool(f.get("related_test_changed")))
+        if r.get("diff_snippet") and "hunk_hash" not in r:
+            r["hunk_hash"] = hashlib.sha1(r["diff_snippet"].encode()).hexdigest()[:10]
+    stations(review, cfg)
     review["render"] = {
+        "dirs": dir_tiles(review),
         "sections": cfg["report"]["sections"],
         "columns": cfg["report"]["columns"],
         "group_by": cfg["report"]["group_by"],
@@ -210,6 +237,99 @@ def fill(review: dict, changes: dict | None, cfg: dict) -> dict:
         "severity_scale": cfg["severity_scale"],
     }
     return review
+
+
+def finding_ids(review: dict) -> None:
+    """Stable ids f1, f2, … in list order; post_review.py relies on the same numbering."""
+    taken = {f["id"] for f in review.get("findings") or [] if f.get("id")}
+    n = 0
+    for f in review.get("findings") or []:
+        if not f.get("id"):
+            n += 1
+            while f"f{n}" in taken:
+                n += 1
+            f["id"] = f"f{n}"
+            taken.add(f["id"])
+
+
+def stations(review: dict, cfg: dict) -> None:
+    """Assign every row to a review-path station (1–5) and summarise each station's size and time."""
+    scale, rows = cfg["severity_scale"], review["rows"]
+    rank = {s: i for i, s in enumerate(scale)}
+    mid = scale[len(scale) // 2]
+    strong = set(cfg["verdicts"][-2:])
+    attached: dict[str, list[dict]] = {}
+    for f in review.get("findings") or []:
+        for rid in f.get("row_ids") or []:
+            attached.setdefault(rid, []).append(f)
+    s = review.setdefault("summary", {})
+    lb = [x for x in s.get("load_bearing") or [] if any(r["id"] == x for r in rows)]
+    if not lb:
+        # fallback: the highest-severity rows that are not lgtm, at most three, real files only
+        cands = [r for r in rows if r["verdict"] != cfg["verdicts"][0] and not r["file"].endswith("/")]
+        if cands:
+            top = max(rank.get(r["severity"], 0) for r in cands)
+            if top >= rank[mid]:
+                lb = [r["id"] for r in cands if rank.get(r["severity"], 0) == top][:3]
+    s["load_bearing"] = lb
+    for r in rows:
+        worst = max((rank.get(f["severity"], 0) for f in attached.get(r["id"], [])), default=-1)
+        if r["id"] in lb:
+            r["station"] = 1
+        elif r["verdict"] in strong or worst >= rank[mid] or rank.get(r["severity"], 0) >= rank[mid]:
+            r["station"] = 2
+        elif r["logical"] == "red":
+            r["station"] = 3
+        elif r.get("change_type") == "test":
+            r["station"] = 4
+        else:
+            r["station"] = 5
+    out = []
+    for i, (name, hint) in enumerate(STATIONS, start=1):
+        rs = [r for r in rows if r["station"] == i]
+        real = [r for r in rs if not r["file"].endswith("/")]
+        lines = sum((r.get("additions") or 0) + (r.get("deletions") or 0) for r in real)
+        # directory summaries were reviewed at summary level: a glance each, not a read
+        minutes = round(lines / LOC_PER_HOUR * 60 / (SKIM_FACTOR if i == 5 else 1)) + DIR_ROW_MINUTES * (
+            len(rs) - len(real)
+        )
+        out.append({"n": i, "name": name, "hint": hint, "rows": len(rs), "lines": lines, "minutes": minutes})
+    s.setdefault("stats", {})["minutes"] = sum(x["minutes"] for x in out)
+    s["stats"]["sessions"] = max(1, -(-s["stats"]["minutes"] // 60))
+    review["render_stations"] = out
+
+
+def dir_tiles(review: dict) -> list[dict]:
+    """One tile per top-level directory: lines changed, worst RAG, findings count. Feeds the shape strip."""
+    rag = {"red": 0, "amber": 1, "green": 2}
+    counts: dict[str, dict] = {}
+    attached = {rid for f in review.get("findings") or [] for rid in (f.get("row_ids") or [])}
+    for r in review["rows"]:
+        key = r["file"].split("/")[0] + ("/" if "/" in r["file"] else "")
+        t = counts.setdefault(key, {"name": key, "add": 0, "del": 0, "rag": "green", "findings": 0, "rows": 0})
+        t["add"] += r.get("additions") or 0
+        t["del"] += r.get("deletions") or 0
+        t["rows"] += 1
+        t["findings"] += r["id"] in attached
+        if rag[r["logical"]] < rag[t["rag"]]:
+            t["rag"] = r["logical"]
+    return sorted(counts.values(), key=lambda t: -(t["add"] + t["del"]))
+
+
+def resolved_since(review: dict, prev_path: Path) -> None:
+    """Findings from the previous review that no longer appear: listed so the reviewer sees what was addressed."""
+    if not prev_path.exists():
+        return
+    try:
+        prev = json.loads(prev_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    now = {(f.get("file"), f["title"].lower()) for f in review.get("findings") or []}
+    gone = [f for f in prev.get("findings") or [] if (f.get("file"), f["title"].lower()) not in now]
+    if gone:
+        review.setdefault("summary", {})["resolved_findings"] = [
+            {k: f.get(k) for k in ("severity", "title", "file", "line") if f.get(k)} for f in gone
+        ]
 
 
 def warnings(review: dict, cfg: dict) -> list[str]:
@@ -247,6 +367,8 @@ def to_markdown(review: dict, cfg: dict) -> str:
     out += [f"🟢 {s['stats']['green']} · 🟡 {s['stats']['amber']} · 🔴 {s['stats']['red']}", ""]
     for p in s.get("narrative") or []:
         out += [p, ""]
+    if s.get("verify"):
+        out += ["**How to verify**", ""] + [f"- {v}" for v in s["verify"]] + [""]
     cols = cfg["report"]["columns"]
     head = {
         "file": "File",
@@ -259,6 +381,7 @@ def to_markdown(review: dict, cfg: dict) -> str:
         "severity": "Severity",
         "impact": "Impact",
         "lines": "Lines",
+        "shape": "+/−",
     }
     out += [
         "## Changes by function",
@@ -277,6 +400,8 @@ def to_markdown(review: dict, cfg: dict) -> str:
                 cells.append(f"[{fn}]({r['line_link']})" if r.get("line_link") else fn)
             elif c == "logical":
                 cells.append(f"{emoji[r['logical']]} {r['logical']}")
+            elif c == "shape":
+                cells.append(f"+{r.get('additions') or 0} −{r.get('deletions') or 0}")
             elif c == "lines":
                 cells.append(
                     f"{r.get('line_start', '')}{'–' + str(r['line_end']) if r.get('line_end') and r.get('line_end') != r.get('line_start') else ''}"
@@ -352,6 +477,7 @@ def main(argv: list[str]) -> None:
     for w in warnings(review, cfg):
         print(f"warning: {w}")
     review = fill(review, changes, cfg)
+    resolved_since(review, Path(argv[0]).with_name("review.prev.json"))
     fmt = argv[argv.index("--format") + 1] if "--format" in argv else cfg["output"]["format"]
     explicit = Path(argv[argv.index("--out") + 1]) if "--out" in argv else None
     written = []

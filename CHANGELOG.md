@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 — 2026-09-29
+- Report redesigned around how expert reviewers read a PR (see `docs/report-v2-design.md`): a decide strip (verdict, reason, "start here", worst finding), a shape strip of directory tiles sized by lines and coloured by risk, and the table grouped into a **review path** — load-bearing → blockers → red paths judged ok → tests → everything else — with a time estimate per station and a reviewed tick per row. `report.group_by` gains `path` and it is the default.
+- Rows carry a `shape` cell (diff bar, +/−, findings badge, tests tick); expanded rows show attached findings first, then the diff with a line-number gutter. Findings are a table with Agree / Not an issue / Fixed; **Copy decisions** exports them. Reviewed marks and decisions persist in the browser per head commit.
+- Rail: review-path stations with progress, a collapsible file tree that filters the table, keyboard `x` reviewed, `f` next finding, `n` next station, `o` open line.
+- Chat: a fixed-shape review card with clickable `file:line` links, and follow-up modes `walk`, `show N`, `fix N`, `post`. `post_review.py --decisions` honours reviewer decisions. Rubric asks for `summary.load_bearing` and `summary.verify`.
+- Merge: duplicates already in `review.json` are folded; a same-line, same-severity pair with shared wording counts as one; prism findings are attached to rows by line. Repeat reviews list findings resolved since the previous one.
+
 ## 1.6.0 — 2026-09-29
 - Optional detection by Anthropic's pr-review-toolkit agents: `review.engine` (auto | prism | toolkit, default auto) and `review.min_agent_confidence` (default 80). In Claude Code with the plugin installed, pr-ism spawns code-reviewer plus whichever of silent-failure-hunter, pr-test-analyzer, type-design-analyzer and comment-analyzer fit the diff; rows, RAG and verdicts stay pr-ism's. Without the plugin (and always on claude.ai) the rubric works as before.
 - `merge_findings.py`: attaches agent findings to rows by segment range, dedupes, drops low-confidence findings, maps severities, raises row severity and verdict, turns test-analyzer findings into test gaps.

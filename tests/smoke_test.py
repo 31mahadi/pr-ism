@@ -36,6 +36,7 @@ def check_frontmatter():
         "references/review-schema.md",
         "references/config-reference.md",
         "references/toolkit-engine.md",
+        "references/chat-modes.md",
         "assets/report-template.html",
         "assets/default-config.json",
     ):
@@ -295,11 +296,64 @@ def check_merge(d, w, eff, review):
     )
     html = (w / "merged.html").read_text()
     assert "toolkit:code-reviewer" in html and 'id="src"' in html
+    check_path_and_decisions(d, w, eff, cmd[2], changes)
     bad = dict(merged, findings=[dict(hit, source="gpt")])
     (w / "badsrc.json").write_text(json.dumps(bad))
     r = sh([sys.executable, S / "render_report.py", w / "badsrc.json", "--validate-only"], d, check=False)
     assert r.returncode == 1 and "source" in r.stdout, r.stdout
     print("ok  merge:", out.strip().splitlines()[0])
+
+
+def check_path_and_decisions(d, w, eff, review_path, changes):
+    """Renderer: stations, ids, hashes, tiles. post_review: --decisions."""
+    sys.path.insert(0, str(S))
+    import render_report as rr  # noqa: E402
+
+    cfg = json.loads(Path(eff).read_text())
+    rv = rr.fill(json.loads(Path(review_path).read_text()), json.loads(Path(changes).read_text()), cfg)
+    rows = {r["function"]: r for r in rv["rows"]}
+    assert rows["f"]["station"] == 1 and rows["g"]["station"] == 5, [(r["function"], r["station"]) for r in rv["rows"]]
+    assert rows["f"]["hunk_hash"] and rows["f"]["id"] == "r1" and rv["findings"][0]["id"] == "f1"
+    assert rv["summary"]["load_bearing"] == ["r1"], rv["summary"]["load_bearing"]  # fallback: the top non-lgtm row
+    assert [t["name"] for t in rv["render"]["dirs"]] == ["src/"] and rv["render"]["dirs"][0]["findings"] >= 1
+    assert rv["summary"]["stats"]["sessions"] == 1 and [s["n"] for s in rv["render_stations"]] == [1, 2, 3, 4, 5]
+    # an explicit load_bearing wins and a bad one is rejected
+    rev2 = json.loads(Path(review_path).read_text())
+    rev2["summary"]["load_bearing"] = ["r2"]
+    rev2["summary"]["verify"] = ["call f(None); expect 0"]
+    assert rr.fill(rev2, json.loads(Path(changes).read_text()), cfg)["rows"][1]["station"] == 1
+    rev2["summary"]["verify"] = "not a list"
+    assert any("verify" in e for e in rr.validate(rev2, cfg))
+    # decisions: dismissed findings are dropped from the post, fixed ones listed
+    gh = json.loads(Path(changes).read_text())
+    gh["meta"].update(provider="github", repo="o/r", number=7, head_sha="abc")
+    (w / "gh2.json").write_text(json.dumps(gh))
+    (w / "dec.json").write_text(
+        json.dumps({"head_sha": "abc", "decisions": {"f2": {"state": "dismiss"}, "f3": {"state": "fixed"}}})
+    )
+    out = sh(
+        [
+            sys.executable,
+            S / "post_review.py",
+            review_path,
+            "--changes",
+            w / "gh2.json",
+            "--config",
+            eff,
+            "--decisions",
+            w / "dec.json",
+            "--out",
+            w / "dec-payload.json",
+        ],
+        d,
+    ).stdout
+    payload = json.loads((w / "dec-payload.json").read_text())
+    titles = [f["title"] for f in rv["findings"]]
+    assert (
+        titles[1] not in payload["body"] and titles[2] in payload["body"] and "Already addressed" in payload["body"]
+    ), (out, payload["body"])
+    assert "already fixed: 1" in out, out
+    print("ok  review path + decisions")
 
 
 if __name__ == "__main__":
