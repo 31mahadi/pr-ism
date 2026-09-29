@@ -21,6 +21,7 @@ review.prev.json and prints `incremental: <old>..<new>`. --since SHA forces the 
 to a full review. Exit code 1 with a
 plain-English reason when a ref cannot be resolved (missing CLI, auth, not a repo...).
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -83,6 +84,7 @@ def stamp() -> str:
 
 # ---------------------------------------------------------------- GitHub
 
+
 def fetch_github(owner: str, repo: str, number: str) -> tuple[str, dict]:
     full = f"{owner}/{repo}"
     if shutil.which("gh"):
@@ -90,11 +92,23 @@ def fetch_github(owner: str, repo: str, number: str) -> tuple[str, dict]:
         meta = json.loads(run(["gh", "pr", "view", number, "--repo", full, "--json", fields]))
         diff = run(["gh", "pr", "diff", number, "--repo", full])
         return diff, {
-            "provider": "github", "repo": full, "number": int(number), "url": meta["url"],
-            "title": meta["title"], "body": meta.get("body") or "", "author": (meta.get("author") or {}).get("login"),
-            "base": meta["baseRefName"], "head": meta["headRefName"], "head_sha": meta["headRefOid"], "base_sha": meta.get("baseRefOid"),
-            "state": meta.get("state"), "draft": meta.get("isDraft"), "additions": meta.get("additions"), "deletions": meta.get("deletions"),
-            "changed_files": meta.get("changedFiles"), "web_base": f"https://github.com/{full}",
+            "provider": "github",
+            "repo": full,
+            "number": int(number),
+            "url": meta["url"],
+            "title": meta["title"],
+            "body": meta.get("body") or "",
+            "author": (meta.get("author") or {}).get("login"),
+            "base": meta["baseRefName"],
+            "head": meta["headRefName"],
+            "head_sha": meta["headRefOid"],
+            "base_sha": meta.get("baseRefOid"),
+            "state": meta.get("state"),
+            "draft": meta.get("isDraft"),
+            "additions": meta.get("additions"),
+            "deletions": meta.get("deletions"),
+            "changed_files": meta.get("changedFiles"),
+            "web_base": f"https://github.com/{full}",
         }
     # REST fallback (public repos, or GITHUB_TOKEN for private)
     headers = {"User-Agent": "pr-ism", "Accept": "application/vnd.github+json"}
@@ -105,55 +119,89 @@ def fetch_github(owner: str, repo: str, number: str) -> tuple[str, dict]:
     try:
         with urllib.request.urlopen(urllib.request.Request(api, headers=headers)) as r:
             meta = json.load(r)
-        with urllib.request.urlopen(urllib.request.Request(api, headers={**headers, "Accept": "application/vnd.github.diff"})) as r:
+        with urllib.request.urlopen(
+            urllib.request.Request(api, headers={**headers, "Accept": "application/vnd.github.diff"})
+        ) as r:
             diff = r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         fallback = fetch_via_git_ref(f"refs/pull/{number}/head", full, number, "github")
         if fallback:
             return fallback
-        die(f"GitHub API {e.code} for {full}#{number} — install `gh` and run `gh auth login`, set GITHUB_TOKEN, or run inside a clone of {full}")
+        die(
+            f"GitHub API {e.code} for {full}#{number} — install `gh` and run `gh auth login`, set GITHUB_TOKEN, or run inside a clone of {full}"
+        )
     except urllib.error.URLError as e:
         fallback = fetch_via_git_ref(f"refs/pull/{number}/head", full, number, "github")
         if fallback:
             return fallback
         die(f"network error reaching api.github.com: {e.reason}")
     return diff, {
-        "provider": "github", "repo": full, "number": int(number), "url": meta["html_url"], "title": meta["title"],
-        "body": meta.get("body") or "", "author": (meta.get("user") or {}).get("login"), "base": meta["base"]["ref"],
-        "head": meta["head"]["ref"], "head_sha": meta["head"]["sha"], "base_sha": meta["base"]["sha"], "state": meta.get("state"),
-        "draft": meta.get("draft"), "additions": meta.get("additions"), "deletions": meta.get("deletions"),
-        "changed_files": meta.get("changed_files"), "web_base": f"https://github.com/{full}",
+        "provider": "github",
+        "repo": full,
+        "number": int(number),
+        "url": meta["html_url"],
+        "title": meta["title"],
+        "body": meta.get("body") or "",
+        "author": (meta.get("user") or {}).get("login"),
+        "base": meta["base"]["ref"],
+        "head": meta["head"]["ref"],
+        "head_sha": meta["head"]["sha"],
+        "base_sha": meta["base"]["sha"],
+        "state": meta.get("state"),
+        "draft": meta.get("draft"),
+        "additions": meta.get("additions"),
+        "deletions": meta.get("deletions"),
+        "changed_files": meta.get("changed_files"),
+        "web_base": f"https://github.com/{full}",
     }
 
 
 # ---------------------------------------------------------------- GitLab
 
+
 def fetch_gitlab(host: str, project: str, iid: str) -> tuple[str, dict]:
     if not shutil.which("glab"):
-        fallback = fetch_via_git_ref(f"refs/merge-requests/{iid}/head", project, iid, "gitlab", f"https://{host}/{project}")
+        fallback = fetch_via_git_ref(
+            f"refs/merge-requests/{iid}/head", project, iid, "gitlab", f"https://{host}/{project}"
+        )
         if fallback:
             return fallback
-        die("GitLab MRs need the `glab` CLI (https://gitlab.com/gitlab-org/cli) — install it and run `glab auth login`, or run inside a clone of the project")
+        die(
+            "GitLab MRs need the `glab` CLI (https://gitlab.com/gitlab-org/cli) — install it and run `glab auth login`, or run inside a clone of the project"
+        )
     env_repo = f"{host}/{project}"
     meta = json.loads(run(["glab", "mr", "view", iid, "--repo", env_repo, "--output", "json"]))
     diff = run(["glab", "mr", "diff", iid, "--repo", env_repo, "--raw"])
     return diff, {
-        "provider": "gitlab", "repo": project, "number": int(iid), "url": meta.get("web_url"), "title": meta.get("title"),
-        "body": meta.get("description") or "", "author": (meta.get("author") or {}).get("username"),
-        "base": meta.get("target_branch"), "head": meta.get("source_branch"), "head_sha": meta.get("sha"),
-        "base_sha": (meta.get("diff_refs") or {}).get("base_sha"), "state": meta.get("state"), "draft": meta.get("draft"),
+        "provider": "gitlab",
+        "repo": project,
+        "number": int(iid),
+        "url": meta.get("web_url"),
+        "title": meta.get("title"),
+        "body": meta.get("description") or "",
+        "author": (meta.get("author") or {}).get("username"),
+        "base": meta.get("target_branch"),
+        "head": meta.get("source_branch"),
+        "head_sha": meta.get("sha"),
+        "base_sha": (meta.get("diff_refs") or {}).get("base_sha"),
+        "state": meta.get("state"),
+        "draft": meta.get("draft"),
         "web_base": f"https://{host}/{project}",
     }
 
 
-def fetch_via_git_ref(remote_ref: str, repo: str, number: str, provider: str, web_base: str | None = None) -> tuple[str, dict] | None:
+def fetch_via_git_ref(
+    remote_ref: str, repo: str, number: str, provider: str, web_base: str | None = None
+) -> tuple[str, dict] | None:
     """Private repo, no CLI, but we are inside a clone: fetch the PR head ref with the user's git credentials."""
     if not in_git_repo():
         return None
     local = repo_name_from_remote()
     if not local or local.lower() != repo.lower():
         return None
-    r = subprocess.run(["git", "fetch", "-q", "origin", f"{remote_ref}:refs/pr-ism/{number}"], capture_output=True, text=True)
+    r = subprocess.run(
+        ["git", "fetch", "-q", "origin", f"{remote_ref}:refs/pr-ism/{number}"], capture_output=True, text=True
+    )
     if r.returncode != 0:
         return None
     base = default_base()
@@ -162,14 +210,25 @@ def fetch_via_git_ref(remote_ref: str, repo: str, number: str, provider: str, we
     head_sha = run(["git", "rev-parse", head]).strip()
     title = run(["git", "log", "-1", "--format=%s", head]).strip()
     return diff, {
-        "provider": provider, "repo": repo, "number": int(number), "url": f"{web_base or 'https://github.com/' + repo}/{'pull' if provider == 'github' else '-/merge_requests'}/{number}",
-        "title": title, "body": "", "author": run(["git", "log", "-1", "--format=%an", head]).strip(), "base": base, "head": head,
-        "head_sha": head_sha, "base_sha": run(["git", "merge-base", base, head]).strip(), "web_base": web_base or f"https://github.com/{repo}",
-        "root": run(["git", "rev-parse", "--show-toplevel"]).strip(), "via": "git fetch (metadata limited)",
+        "provider": provider,
+        "repo": repo,
+        "number": int(number),
+        "url": f"{web_base or 'https://github.com/' + repo}/{'pull' if provider == 'github' else '-/merge_requests'}/{number}",
+        "title": title,
+        "body": "",
+        "author": run(["git", "log", "-1", "--format=%an", head]).strip(),
+        "base": base,
+        "head": head,
+        "head_sha": head_sha,
+        "base_sha": run(["git", "merge-base", base, head]).strip(),
+        "web_base": web_base or f"https://github.com/{repo}",
+        "root": run(["git", "rev-parse", "--show-toplevel"]).strip(),
+        "via": "git fetch (metadata limited)",
     }
 
 
 # ---------------------------------------------------------------- local git
+
 
 def fetch_local(ref: str, base: str | None) -> tuple[str, dict]:
     if not in_git_repo():
@@ -190,10 +249,20 @@ def fetch_local(ref: str, base: str | None) -> tuple[str, dict]:
     log = run(["git", "log", "--format=%s", f"{base_sha}..{right}"]).strip().splitlines()
     title = log[-1] if log else f"{right} vs {left}"
     return diff, {
-        "provider": "local", "repo": repo_name_from_remote() or Path.cwd().name, "number": None, "url": None,
-        "title": title, "body": "\n".join(log[:-1]) if len(log) > 1 else "", "author": run(["git", "log", "-1", "--format=%an", right]).strip(),
-        "base": left, "head": right, "head_sha": head_sha, "base_sha": base_sha, "commits": len(log),
-        "web_base": None, "root": run(["git", "rev-parse", "--show-toplevel"]).strip(),
+        "provider": "local",
+        "repo": repo_name_from_remote() or Path.cwd().name,
+        "number": None,
+        "url": None,
+        "title": title,
+        "body": "\n".join(log[:-1]) if len(log) > 1 else "",
+        "author": run(["git", "log", "-1", "--format=%an", right]).strip(),
+        "base": left,
+        "head": right,
+        "head_sha": head_sha,
+        "base_sha": base_sha,
+        "commits": len(log),
+        "web_base": None,
+        "root": run(["git", "rev-parse", "--show-toplevel"]).strip(),
     }
 
 
@@ -203,30 +272,47 @@ def fetch_patch(path: str) -> tuple[str, dict]:
     if not diff.strip():
         die("the patch is empty")
     return diff, {
-        "provider": "patch", "repo": repo_name_from_remote() or Path.cwd().name, "number": None, "url": None,
-        "title": p.stem if path != "-" else "pasted diff", "body": "", "author": None, "base": None, "head": None,
-        "head_sha": None, "base_sha": None, "web_base": None,
+        "provider": "patch",
+        "repo": repo_name_from_remote() or Path.cwd().name,
+        "number": None,
+        "url": None,
+        "title": p.stem if path != "-" else "pasted diff",
+        "body": "",
+        "author": None,
+        "base": None,
+        "head": None,
+        "head_sha": None,
+        "base_sha": None,
+        "web_base": None,
         "root": run(["git", "rev-parse", "--show-toplevel"]).strip() if in_git_repo() else str(Path.cwd()),
     }
 
 
 # ---------------------------------------------------------------- repeat reviews
 
+
 def since_diff(meta: dict, old: str, new: str) -> str | None:
     """Diff of just the commits between two heads, or None when the old head is gone (force-push)."""
     if in_git_repo():
-        have = all(subprocess.run(["git", "cat-file", "-e", f"{c}^{{commit}}"], capture_output=True).returncode == 0 for c in (old, new))
+        have = all(
+            subprocess.run(["git", "cat-file", "-e", f"{c}^{{commit}}"], capture_output=True).returncode == 0
+            for c in (old, new)
+        )
         if have:
             return subprocess.run(["git", "diff", "--find-renames", old, new], capture_output=True, text=True).stdout
     if meta.get("provider") == "github" and shutil.which("gh"):
-        r = subprocess.run(["gh", "api", "-H", "Accept: application/vnd.github.diff", f"repos/{meta['repo']}/compare/{old}...{new}"],
-                           capture_output=True, text=True)
+        r = subprocess.run(
+            ["gh", "api", "-H", "Accept: application/vnd.github.diff", f"repos/{meta['repo']}/compare/{old}...{new}"],
+            capture_output=True,
+            text=True,
+        )
         if r.returncode == 0:
             return r.stdout
     return None
 
 
 # ---------------------------------------------------------------- dispatch
+
 
 def resolve(ref: str, base: str | None) -> tuple[str, dict]:
     if ref == "-" or ref.endswith((".diff", ".patch")):
@@ -283,10 +369,19 @@ def main(argv: list[str]) -> None:
     elif "--full" not in argv and old and old == new:
         notes.append("unchanged since the last review (same head commit)")
     (out / "pr.diff").write_text(diff, encoding="utf-8")
-    meta.update({"id": ident, "fetched_at": stamp(), "diff_sha256": hashlib.sha256(diff.encode()).hexdigest()[:12],
-                 "root": meta.get("root") or (run(["git", "rev-parse", "--show-toplevel"]).strip() if in_git_repo() else str(Path.cwd()))})
+    meta.update(
+        {
+            "id": ident,
+            "fetched_at": stamp(),
+            "diff_sha256": hashlib.sha256(diff.encode()).hexdigest()[:12],
+            "root": meta.get("root")
+            or (run(["git", "rev-parse", "--show-toplevel"]).strip() if in_git_repo() else str(Path.cwd())),
+        }
+    )
     (out / "pr.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    print(f"diff: {out / 'pr.diff'}\nmeta: {out / 'pr.json'}\ntitle: {meta['title']}\nrepo: {meta['repo']}  base: {meta.get('base')}  head: {meta.get('head')}")
+    print(
+        f"diff: {out / 'pr.diff'}\nmeta: {out / 'pr.json'}\ntitle: {meta['title']}\nrepo: {meta['repo']}  base: {meta.get('base')}  head: {meta.get('head')}"
+    )
     for n in notes:
         print(n)
 

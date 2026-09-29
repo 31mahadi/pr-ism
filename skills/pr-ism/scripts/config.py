@@ -18,6 +18,7 @@ Usage:
 
 Only keys that exist in default-config.json are accepted; types and enums are checked.
 """
+
 from __future__ import annotations
 
 import copy
@@ -41,8 +42,29 @@ ENUMS = {
 }
 LIST_ENUMS = {
     "report.sections": ["summary", "risk_overview", "table", "findings", "test_gaps", "questions"],
-    "report.columns": ["file", "function", "change_type", "logical", "what", "why", "verdict", "severity", "impact", "lines"],
-    "review.focus": ["correctness", "security", "performance", "tests", "readability", "api", "data", "concurrency", "observability"],
+    "report.columns": [
+        "file",
+        "function",
+        "change_type",
+        "logical",
+        "what",
+        "why",
+        "verdict",
+        "severity",
+        "impact",
+        "lines",
+    ],
+    "review.focus": [
+        "correctness",
+        "security",
+        "performance",
+        "tests",
+        "readability",
+        "api",
+        "data",
+        "concurrency",
+        "observability",
+    ],
 }
 DOCS = {
     "output.format": "What to write: html (interactive report), markdown, or both.",

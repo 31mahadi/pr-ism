@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """End-to-end smoke test: frontmatter → config → synthetic repo → fetch → parse → review → render."""
-import json, os, re, subprocess, sys, tempfile
+
+import json
+import re
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,10 +29,15 @@ def check_frontmatter():
     assert name == SKILL.name and re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name) and len(name) <= 64, f"bad name {name}"
     desc = re.search(r"^description:\s*(.+)$", fm, re.M).group(1)
     assert 0 < len(desc) <= 1024, f"description length {len(desc)}"
-    body_lines = text[m.end():].count("\n")
+    body_lines = text[m.end() :].count("\n")
     assert body_lines < 500, f"SKILL.md body is {body_lines} lines; keep it under 500"
-    for f in ("references/review-rubric.md", "references/review-schema.md", "references/config-reference.md",
-              "assets/report-template.html", "assets/default-config.json"):
+    for f in (
+        "references/review-rubric.md",
+        "references/review-schema.md",
+        "references/config-reference.md",
+        "assets/report-template.html",
+        "assets/default-config.json",
+    ):
         assert (SKILL / f).exists(), f"missing {f}"
     json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
     json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
@@ -38,66 +48,164 @@ def check_pipeline():
     with tempfile.TemporaryDirectory() as d:
         d = Path(d)
         sh(["git", "init", "-q", "-b", "main"], d)
-        sh(["git", "config", "user.email", "t@t"], d); sh(["git", "config", "user.name", "t"], d)
+        sh(["git", "config", "user.email", "t@t"], d)
+        sh(["git", "config", "user.name", "t"], d)
         sh(["git", "config", "core.hooksPath", "/dev/null"], d)  # ignore the developer's global hooks
         (d / ".git" / "info" / "exclude").write_text(".pr-ism/\n")
-        (d / "src").mkdir(); (d / "src" / "a.py").write_text("def f(x):\n    return x\n")
+        (d / "src").mkdir()
+        (d / "src" / "a.py").write_text("def f(x):\n    return x\n")
         (d / "yarn.lock").write_text("lock\n")
-        sh(["git", "add", "-A"], d); sh(["git", "commit", "-qm", "init"], d)
+        sh(["git", "add", "-A"], d)
+        sh(["git", "commit", "-qm", "init"], d)
         sh(["git", "checkout", "-qb", "feat"], d)
-        (d / "src" / "a.py").write_text("def f(x):\n    if x is None:\n        return 0\n    return x\n\ndef g():\n    return 1\n")
+        (d / "src" / "a.py").write_text(
+            "def f(x):\n    if x is None:\n        return 0\n    return x\n\ndef g():\n    return 1\n"
+        )
         (d / "yarn.lock").write_text("lock2\n")
-        sh(["git", "add", "-A"], d); sh(["git", "commit", "-qm", "Handle None in f, add g"], d)
+        sh(["git", "add", "-A"], d)
+        sh(["git", "commit", "-qm", "Handle None in f, add g"], d)
         sh(["git", "checkout", "-q", "main"], d)
-        w = d / ".pr-ism"; w.mkdir()
-        eff = w / "effective.json"; eff.write_text(sh([sys.executable, S / "config.py", "show", "--json"], d).stdout)
+        w = d / ".pr-ism"
+        w.mkdir()
+        eff = w / "effective.json"
+        eff.write_text(sh([sys.executable, S / "config.py", "show", "--json"], d).stdout)
         sh([sys.executable, S / "config.py", "set", "review.depth", "deep"], d)
-        r = sh([sys.executable, S / "config.py", "set", "review.depth", "bogus"], d, check=False); assert r.returncode == 1
+        r = sh([sys.executable, S / "config.py", "set", "review.depth", "bogus"], d, check=False)
+        assert r.returncode == 1
         sh([sys.executable, S / "fetch_pr.py", "feat", "--out", w / "work" / "x"], d)
-        sh([sys.executable, S / "parse_diff.py", w / "work" / "x" / "pr.diff", "--meta", w / "work" / "x" / "pr.json", "--config", eff, "--out", w / "work" / "x" / "changes.json"], d)
+        sh(
+            [
+                sys.executable,
+                S / "parse_diff.py",
+                w / "work" / "x" / "pr.diff",
+                "--meta",
+                w / "work" / "x" / "pr.json",
+                "--config",
+                eff,
+                "--out",
+                w / "work" / "x" / "changes.json",
+            ],
+            d,
+        )
         ch = json.loads((w / "work" / "x" / "changes.json").read_text())
         assert [f["path"] for f in ch["files"]] == ["src/a.py"], ch["files"]
         assert ch["skipped"][0]["path"] == "yarn.lock"
         fns = {s["function"] for h in ch["files"][0]["hunks"] for s in h["segments"]}
         assert fns == {"f", "g"}, fns
         assert (w / "work" / "x" / "changes.md").exists()
-        shown = sh([sys.executable, S / "parse_diff.py", "show", w / "work" / "x" / "changes.json", "src/a.py:g"], d).stdout
+        shown = sh(
+            [sys.executable, S / "parse_diff.py", "show", w / "work" / "x" / "changes.json", "src/a.py:g"], d
+        ).stdout
         assert "def g" in shown
         # keyword false positives + rename detection
-        sys.path.insert(0, str(S)); import parse_diff as pd  # noqa: E402
+        sys.path.insert(0, str(S))
+        import parse_diff as pd  # noqa: E402
+
         assert pd.def_name("if (x) {", "javascript") is None and pd.def_name("} else if (v > hi) {", "java") is None
         assert pd.def_name("for (const it of o.items) {", "javascript") is None
-        assert pd.def_name("export function newName(x) {", "javascript") == "newName" and pd.def_name("func (s *Svc) Handle(w http.ResponseWriter) {", "go") == "Handle"
-        segs = pd.segments([{"t": "-", "text": "def old():", "old": 1}, {"t": "+", "text": "def new():", "new": 1}, {"t": " ", "text": "    pass", "old": 2, "new": 2}], None, "python")
+        assert (
+            pd.def_name("export function newName(x) {", "javascript") == "newName"
+            and pd.def_name("func (s *Svc) Handle(w http.ResponseWriter) {", "go") == "Handle"
+        )
+        segs = pd.segments(
+            [
+                {"t": "-", "text": "def old():", "old": 1},
+                {"t": "+", "text": "def new():", "new": 1},
+                {"t": " ", "text": "    pass", "old": 2, "new": 2},
+            ],
+            None,
+            "python",
+        )
         assert segs[0]["function"] == "old → new", segs
-        review = {"meta": {"title": "t"}, "summary": {"overall_verdict": "approve-with-nits", "one_liner": "fine"},
-                  "rows": [{"file": "src/a.py", "function": "f", "change_type": "bugfix", "logical": "amber", "what": "handles None", "verdict": "lgtm", "severity": "info"},
-                           {"file": "src/a.py", "function": "g", "change_type": "added", "logical": "green", "what": "new helper", "verdict": "nit", "severity": "low"}]}
+        review = {
+            "meta": {"title": "t"},
+            "summary": {"overall_verdict": "approve-with-nits", "one_liner": "fine"},
+            "rows": [
+                {
+                    "file": "src/a.py",
+                    "function": "f",
+                    "change_type": "bugfix",
+                    "logical": "amber",
+                    "what": "handles None",
+                    "verdict": "lgtm",
+                    "severity": "info",
+                },
+                {
+                    "file": "src/a.py",
+                    "function": "g",
+                    "change_type": "added",
+                    "logical": "green",
+                    "what": "new helper",
+                    "verdict": "nit",
+                    "severity": "low",
+                },
+            ],
+        }
         (w / "work" / "x" / "review.json").write_text(json.dumps(review))
-        out = sh([sys.executable, S / "render_report.py", w / "work" / "x" / "review.json", "--changes", w / "work" / "x" / "changes.json", "--config", eff, "--format", "both", "--no-open"], d).stdout
+        out = sh(
+            [
+                sys.executable,
+                S / "render_report.py",
+                w / "work" / "x" / "review.json",
+                "--changes",
+                w / "work" / "x" / "changes.json",
+                "--config",
+                eff,
+                "--format",
+                "both",
+                "--no-open",
+            ],
+            d,
+        ).stdout
         html = next((d / ".pr-ism" / "reviews").glob("*.html")).read_text()
-        assert "__PRISM_DATA__" not in html and '"line_start": 6' in html or '"line_start":6' in html, "row g should resolve to line 6"
-        bad = dict(review); bad["rows"] = [dict(review["rows"][0], logical="blue")]
+        assert "__PRISM_DATA__" not in html and '"line_start": 6' in html or '"line_start":6' in html, (
+            "row g should resolve to line 6"
+        )
+        bad = dict(review)
+        bad["rows"] = [dict(review["rows"][0], logical="blue")]
         (w / "bad.json").write_text(json.dumps(bad))
-        r = sh([sys.executable, S / "render_report.py", w / "bad.json", "--validate-only"], d, check=False); assert r.returncode == 1 and "logical" in r.stdout
+        r = sh([sys.executable, S / "render_report.py", w / "bad.json", "--validate-only"], d, check=False)
+        assert r.returncode == 1 and "logical" in r.stdout
         # post_review: local changes have nowhere to post; a GitHub-shaped one yields inline + overflow comments
-        r = sh([sys.executable, S / "post_review.py", w / "work" / "x" / "review.json", "--changes", w / "work" / "x" / "changes.json", "--config", eff], d, check=False)
+        r = sh(
+            [
+                sys.executable,
+                S / "post_review.py",
+                w / "work" / "x" / "review.json",
+                "--changes",
+                w / "work" / "x" / "changes.json",
+                "--config",
+                eff,
+            ],
+            d,
+            check=False,
+        )
         assert r.returncode == 1 and "nothing to post to" in (r.stdout + r.stderr), r.stdout + r.stderr
         gh = dict(ch, meta={**ch["meta"], "provider": "github", "repo": "o/r", "number": 7, "head_sha": "abc"})
         (w / "gh.json").write_text(json.dumps(gh))
-        rv = dict(review, findings=[{"severity": "high", "title": "None path untested", "file": "src/a.py", "line": 2},
-                                    {"severity": "medium", "title": "off-diff", "file": "src/a.py", "line": 999}],
-                  rows=[dict(review["rows"][0], verdict="needs-changes", severity="high"), review["rows"][1]])
+        rv = dict(
+            review,
+            findings=[
+                {"severity": "high", "title": "None path untested", "file": "src/a.py", "line": 2},
+                {"severity": "medium", "title": "off-diff", "file": "src/a.py", "line": 999},
+            ],
+            rows=[dict(review["rows"][0], verdict="needs-changes", severity="high"), review["rows"][1]],
+        )
         (w / "rv.json").write_text(json.dumps(rv))
-        dry = sh([sys.executable, S / "post_review.py", w / "rv.json", "--changes", w / "gh.json", "--config", eff], d).stdout
+        dry = sh(
+            [sys.executable, S / "post_review.py", w / "rv.json", "--changes", w / "gh.json", "--config", eff], d
+        ).stdout
         assert "dry run" in dry and "inline comments: 2" in dry and "in summary only: 1" in dry, dry
         payload = json.loads((w / "comments.json").read_text())
-        assert payload["event"] == "COMMENT" and payload["commit_id"] == "abc" and "off-diff" in payload["body"], payload
+        assert payload["event"] == "COMMENT" and payload["commit_id"] == "abc" and "off-diff" in payload["body"], (
+            payload
+        )
         # repeat review: second fetch after a new commit writes pr.since.diff with only the new change
         (w / "work" / "x" / "review.json").write_text(json.dumps(review))
         sh(["git", "checkout", "-q", "feat"], d)
         (d / "src" / "b.py").write_text("def h():\n    return 2\n")
-        sh(["git", "add", "-A"], d); sh(["git", "commit", "-qm", "add h"], d)
+        sh(["git", "add", "-A"], d)
+        sh(["git", "commit", "-qm", "add h"], d)
         sh(["git", "checkout", "-q", "main"], d)
         again = sh([sys.executable, S / "fetch_pr.py", "feat", "--out", w / "work" / "x"], d).stdout
         assert "incremental:" in again, again
@@ -110,4 +218,6 @@ def check_pipeline():
 
 
 if __name__ == "__main__":
-    check_frontmatter(); check_pipeline(); print("all good")
+    check_frontmatter()
+    check_pipeline()
+    print("all good")

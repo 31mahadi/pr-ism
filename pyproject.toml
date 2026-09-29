@@ -1,0 +1,8 @@
+# Lint/format settings only; pr-ism is a skill, not an installable package.
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM", "I"]
+ignore = ["E501"]  # long regexes and messages are clearer on one line; the formatter handles the rest

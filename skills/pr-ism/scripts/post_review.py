@@ -16,6 +16,7 @@ Inline comments are made for findings, and for rows whose verdict is needs-chang
 question, at or above --min-severity (default: the second-lowest configured severity).
 The review event defaults to `comment`; it never approves or requests changes unless asked.
 """
+
 from __future__ import annotations
 
 import json
@@ -41,7 +42,9 @@ def die(msg: str) -> None:
 
 def in_diff(by_path: dict, path: str, line: int | None) -> bool:
     f = by_path.get(path)
-    return bool(f and line and any(h.get("new_range") and h["new_range"][0] <= line <= h["new_range"][1] for h in f["hunks"]))
+    return bool(
+        f and line and any(h.get("new_range") and h["new_range"][0] <= line <= h["new_range"][1] for h in f["hunks"])
+    )
 
 
 def collect(review: dict, changes: dict, cfg: dict, min_sev: str) -> tuple[list[dict], list[str]]:
@@ -75,7 +78,12 @@ def collect(review: dict, changes: dict, cfg: dict, min_sev: str) -> tuple[list[
             body += f"\n\n{r['why']}"
         if r.get("suggestion"):
             body += f"\n\n_Suggestion:_ {r['suggestion']}"
-        place(r["file"], r.get("line_start"), body, f"- **{r['verdict']}** `{r['file']}` · `{r.get('function') or 'top-level'}`: {r['what']}")
+        place(
+            r["file"],
+            r.get("line_start"),
+            body,
+            f"- **{r['verdict']}** `{r['file']}` · `{r.get('function') or 'top-level'}`: {r['what']}",
+        )
     return inline, overflow
 
 
@@ -84,14 +92,23 @@ def summary_body(review: dict, overflow: list[str], report_note: str | None) -> 
     st = s.get("stats", {})
     rows = review["rows"]
     counts = {k: st.get(k, sum(1 for r in rows if r["logical"] == k)) for k in EMOJI}
-    out = [MARKER, f"### pr-ism review: {s['overall_verdict']}", "", s["one_liner"], "",
-           " · ".join(f"{EMOJI[k]} {counts[k]}" for k in EMOJI)]
+    out = [
+        MARKER,
+        f"### pr-ism review: {s['overall_verdict']}",
+        "",
+        s["one_liner"],
+        "",
+        " · ".join(f"{EMOJI[k]} {counts[k]}" for k in EMOJI),
+    ]
     for p in s.get("narrative") or []:
         out += ["", p]
     if overflow:
         out += ["", "**Findings not attached to a diff line**", *overflow]
     if review.get("test_gaps"):
-        out += ["", "**Test gaps**"] + [f"- `{g['file']}`{' · ' + g['function'] if g.get('function') else ''}: {g['reason']}" for g in review["test_gaps"]]
+        out += ["", "**Test gaps**"] + [
+            f"- `{g['file']}`{' · ' + g['function'] if g.get('function') else ''}: {g['reason']}"
+            for g in review["test_gaps"]
+        ]
     if review.get("questions"):
         out += ["", "**Questions**"] + [f"- {q if isinstance(q, str) else q.get('text')}" for q in review["questions"]]
     if report_note:
@@ -111,7 +128,8 @@ def gh_api(path: str, payload: dict) -> dict:
 
 def main(argv: list[str]) -> None:
     if not argv or argv[0] in ("-h", "--help"):
-        print(__doc__); return
+        print(__doc__)
+        return
     review = json.loads(Path(argv[0]).read_text(encoding="utf-8"))
     if "--changes" not in argv:
         die("--changes changes.json is required (it says which lines are inside the diff)")
@@ -128,6 +146,7 @@ def main(argv: list[str]) -> None:
 
     # lines come from the renderer's fill step; run it so rows without line_start get one
     from render_report import fill  # noqa: E402
+
     review = fill(review, changes, cfg)
     inline, overflow = collect(review, changes, cfg, min_sev)
     provider, number, repo = meta.get("provider"), meta.get("number"), meta.get("repo")
@@ -137,7 +156,11 @@ def main(argv: list[str]) -> None:
         if meta.get("head_sha"):
             payload["commit_id"] = meta["head_sha"]
     elif provider == "gitlab":
-        payload = {"body": summary_body(review, overflow + [f"- `{c['path']}:{c['line']}`: {c['body'].splitlines()[0]}" for c in inline], None)}
+        payload = {
+            "body": summary_body(
+                review, overflow + [f"- `{c['path']}:{c['line']}`: {c['body'].splitlines()[0]}" for c in inline], None
+            )
+        }
         inline = []
     else:
         die(f"nothing to post to: this review is of a {provider or 'local'} change, not a GitHub PR or GitLab MR")
@@ -158,7 +181,11 @@ def main(argv: list[str]) -> None:
     else:
         if not shutil.which("glab"):
             die("posting to GitLab needs the `glab` CLI, logged in (`glab auth login`)")
-        r = subprocess.run(["glab", "mr", "note", str(number), "--repo", repo, "--message", payload["body"]], capture_output=True, text=True)
+        r = subprocess.run(
+            ["glab", "mr", "note", str(number), "--repo", repo, "--message", payload["body"]],
+            capture_output=True,
+            text=True,
+        )
         if r.returncode != 0:
             die(f"GitLab rejected the note: {r.stderr.strip() or r.stdout.strip()}")
         print("posted: MR note added")

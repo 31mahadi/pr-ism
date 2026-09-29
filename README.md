@@ -73,7 +73,9 @@ Review files are written to `<repo>/.pr-ism/`. Add `.pr-ism/work/` and `.pr-ism/
 ## Development
 
 ```
-python3 tests/smoke_test.py   # must print "all good"
+python3 tests/smoke_test.py            # must print "all good"
+uvx ruff check skills tests            # lint (config in pyproject.toml)
+uvx ruff format skills tests           # format
 ```
 
 To release:
