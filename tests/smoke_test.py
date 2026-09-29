@@ -39,6 +39,7 @@ def check_pipeline():
         d = Path(d)
         sh(["git", "init", "-q", "-b", "main"], d)
         sh(["git", "config", "user.email", "t@t"], d); sh(["git", "config", "user.name", "t"], d)
+        sh(["git", "config", "core.hooksPath", "/dev/null"], d)  # ignore the developer's global hooks
         (d / "src").mkdir(); (d / "src" / "a.py").write_text("def f(x):\n    return x\n")
         (d / "yarn.lock").write_text("lock\n")
         sh(["git", "add", "-A"], d); sh(["git", "commit", "-qm", "init"], d)

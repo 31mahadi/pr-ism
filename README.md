@@ -27,15 +27,15 @@ Pick whichever surface you use. All of them read the same `skills/pr-ism` folder
 
 **Claude Code — plugin marketplace (versioned, updatable)**
 ```
-/plugin marketplace add <owner>/pr-ism
+/plugin marketplace add 31mahadi/pr-ism
 /plugin install pr-ism@pr-ism
 ```
 Invoke as `/pr-ism:pr-ism <ref>` (plugin skills are namespaced).
 
 **Claude Code / Codex / Cursor / OpenCode and others — `skills` CLI**
 ```
-npx skills add <owner>/pr-ism            # project scope
-npx skills add <owner>/pr-ism -g         # user scope
+npx skills add 31mahadi/pr-ism            # project scope
+npx skills add 31mahadi/pr-ism -g         # user scope
 ```
 Invoke as `/pr-ism <ref>`.
 

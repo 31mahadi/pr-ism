@@ -1,0 +1,12 @@
+{
+  "name": "pr-ism",
+  "owner": { "name": "Mahadi" },
+  "plugins": [
+    {
+      "name": "pr-ism",
+      "source": "./",
+      "description": "Function-level pull request review for Claude, delivered as an interactive HTML report",
+      "version": "1.3.0"
+    }
+  ]
+}
