@@ -29,8 +29,8 @@ The report is built around how experienced reviewers read a change (the reasonin
 - **Decide strip**: verdict, the one reason, and "start here" — the load-bearing rows and the worst findings, linked
 - **Shape strip**: one tile per directory, sized by lines changed and coloured 🟢 no behaviour change / 🟡 intended change / 🔴 high blast radius; click to filter
 - **Review path**: the function-level table ordered ① load-bearing ② blockers ③ red paths judged ok ④ tests ⑤ everything else, each with a time estimate at 400 lines an hour; tick rows as you go
-- **Rows**: file, function, shape (diff bar, +/−, findings badge, tests tick), change type, rating, what changed, verdict, severity; expand for the attached findings and the diff
-- **Findings** with Agree / Not an issue / Fixed, **test gaps**, **questions for the author**; *Copy decisions* hands your verdicts back to Claude for posting
+- **Rows**: one line per function — file and function, shape (diff bar, +/−, tests tick), the change type tinted by its rating, what changed (as *before → after* for behaviour changes), and a status chip that is blank when the row is fine. Rows judged fine fold into one line per station; expand any row for its findings and diff
+- **Findings** with Agree / Dismiss / Fixed, **test gaps**, **questions for the author**; *Copy decisions* hands your verdicts back to Claude for posting
 
 After the review, Claude prints a 12-line card with clickable `file:line` links. Then say `walk` for a guided pass
 station by station, `show 3` to see one diff, `fix 1` to have finding 1 fixed (applied only after you say yes), or `post`.
@@ -48,7 +48,7 @@ Running it again on the same PR after new commits reviews only what changed sinc
    In Claude Code with pr-review-toolkit installed, its agents run in parallel at the same time: code-reviewer always, and silent-failure-hunter, pr-test-analyzer, type-design-analyzer or comment-analyzer when the diff touches their area.
 4. **Merge**: agent findings are attached to the row whose function contains them. Duplicates and low-confidence findings are dropped, and a row's severity goes up when a finding is worse. Each finding keeps its source.
 5. **Render**: one self-contained HTML report. Rows are ordered into the review path, each station gets a time estimate, and findings from more than one source are labelled and filterable.
-6. **Decide**: tick rows as reviewed and mark findings Agree / Not an issue / Fixed in the report, or `walk` through the path in chat. Marks stay in your browser per head commit.
+6. **Decide**: tick rows as reviewed and mark findings Agree / Dismiss / Fixed in the report, or `walk` through the path in chat. Marks stay in your browser per head commit.
 7. **Post** (optional): the review goes back to the PR as inline comments. Dismissed findings are left out and fixed ones listed as addressed.
 
 `review.engine` picks the detector: `auto` (default) uses the toolkit when it is available and pr-ism's own rubric otherwise.

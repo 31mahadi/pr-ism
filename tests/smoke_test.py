@@ -334,6 +334,16 @@ def check_path_and_decisions(d, w, eff, review_path, changes):
     assert rr.fill(rev2, json.loads(Path(changes).read_text()), cfg)["rows"][1]["station"] == 1
     rev2["summary"]["verify"] = "not a list"
     assert any("verify" in e for e in rr.validate(rev2, cfg))
+    # compact rows: delta shape, long-what warning, merged columns in markdown
+    rev3 = json.loads(Path(review_path).read_text())
+    rev3["rows"][0]["delta"] = {"before": "returned x", "after": "returns 0 for None"}
+    rev3["rows"][1]["what"] = "x" * 120
+    assert not rr.validate(rev3, cfg)
+    assert any("over 100 characters" in x for x in rr.warnings(rev3, cfg))
+    md = rr.to_markdown(rr.fill(rev3, json.loads(Path(changes).read_text()), cfg), cfg)
+    assert "returned x → returns 0 for None" in md and "| Status |" in md and "needs-changes · high" in md, md
+    rev3["rows"][0]["delta"] = "not an object"
+    assert any("delta" in e for e in rr.validate(rev3, cfg))
     # decisions: dismissed findings are dropped from the post, fixed ones listed
     gh = json.loads(Path(changes).read_text())
     gh["meta"].update(provider="github", repo="o/r", number=7, head_sha="abc")

@@ -97,10 +97,18 @@ tr.group .prog{float:right;font-weight:400;color:var(--muted);font-size:11.5px;f
 tr.group .path{font-family:var(--mono);font-weight:500}
 td.rv{width:18px;padding-right:0}td.rv input{margin:2px 0 0;cursor:pointer}
 td.file{font-family:var(--mono);font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-td.function{font-family:var(--mono);font-size:12px;max-width:175px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.function{font-family:var(--mono);font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.function .caret{display:inline-block;width:12px;color:var(--muted);transition:transform .12s}tr[aria-expanded="true"] td.function .caret{transform:rotate(90deg)}
 td.function .badge{margin-left:5px}
 td.what{min-width:16ch;color:var(--ink)}
+td.what .w{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+tr[aria-expanded="true"] td.what .w{-webkit-line-clamp:unset}
+.delta .b{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line-strong)}.delta .ar{color:var(--muted);margin:0 5px}
+td.function .fp{color:var(--muted);font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis}
+.chip.chg{font-weight:500}
+tr.quiet td{padding:5px 8px;color:var(--muted);font-size:12.5px;cursor:pointer;background:var(--surface)}
+tr.quiet td:hover{background:var(--hover)}tr.quiet .names{font-family:var(--mono);font-size:11.5px}
+tr.quiet .caret{display:inline-block;width:12px}
 td.shape{white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
 .bar{display:inline-block;height:8px;background:var(--red);border-radius:2px;overflow:hidden;vertical-align:middle;margin-right:6px;min-width:4px}
 .bar i{display:block;height:100%;background:var(--green)}
@@ -120,7 +128,7 @@ tr.detail td{background:var(--bg);padding:12px 14px 14px 30px}
 .detail .attached{margin:0 0 12px;padding:0;list-style:none;max-width:100ch;font-size:13px}
 .detail .attached li{margin:0 0 8px;padding:8px 10px;background:var(--surface);border:1px solid var(--line);border-radius:5px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:start}
 .detail .attached .body{grid-column:2}.detail .attached .body .dt{color:var(--muted);margin-top:2px}.detail .attached .body .sg{margin-top:2px;font-style:italic}
-.dec{display:flex;gap:4px}.dec button{font-size:11.5px;padding:2px 7px}
+.dec{display:flex;gap:4px;white-space:nowrap}.dec button{font-size:11.5px;padding:2px 7px}
 .dec button[data-s="agree"][aria-pressed="true"]{background:var(--red);border-color:var(--red);color:#fff}
 .dec button[data-s="dismiss"][aria-pressed="true"]{background:var(--muted);border-color:var(--muted);color:#fff}
 .dec button[data-s="fixed"][aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff}
@@ -243,7 +251,8 @@ document.getElementById('shape').innerHTML=(dirs.length?`<div class="tiles" id="
 // summary / risk
 document.getElementById('summary').innerHTML=(S.narrative||[]).map(p=>`<p>${md(p)}</p>`).join('')+((S.verify||[]).length?`<p><b>How to verify</b></p><ol class="verify">${S.verify.map(v=>`<li>${md(v)}</li>`).join('')}</ol>`:'')+((S.themes||[]).length?`<div class="themes">${S.themes.map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:'')+((S.resolved_findings||[]).length?`<div class="resolved"><b>Resolved since the last review</b><ul>${S.resolved_findings.map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span> ${md(f.title)}${f.file?` <span class="mono">${esc(leaf(f.file))}${f.line?':'+f.line:''}</span>`:''}</li>`).join('')}</ul></div>`:'');
 if(!(S.narrative||[]).length&&!(S.verify||[]).length)document.getElementById('sum').classList.add('hidden');
-const R=D.risk_overview||{};const RK=[['Red paths','red_paths_touched'],['Breaking','breaking_changes'],['Migrations','migrations'],['Deps','deps'],['Other','other']].filter(([l,k])=>(R[k]||[]).length);
+const R=D.risk_overview||{};const RK=[['Breaking','breaking_changes'],['Migrations','migrations'],['Deps','deps'],['Other','other']].filter(([l,k])=>(R[k]||[]).length);
+if(!RK.length)document.getElementById('sec-risk_overview').classList.add('hidden');
 document.getElementById('riskchips').innerHTML=RK.length?RK.map(([l,k])=>`<button type="button" data-k="${k}" aria-pressed="false">${esc(l)}<b>${R[k].length}</b></button>`).join(''):'<span class="empty">Nothing risky stood out.</span>';
 document.getElementById('riskchips').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const on=b.getAttribute('aria-pressed')==='true';document.querySelectorAll('#riskchips button').forEach(x=>x.setAttribute('aria-pressed','false'));const ul=document.getElementById('risklist');if(on){ul.classList.add('hidden');return}b.setAttribute('aria-pressed','true');ul.classList.remove('hidden');ul.innerHTML=(R[b.dataset.k]||[]).map(x=>`<li>${md(typeof x==='string'?x:(x.text||JSON.stringify(x)))}</li>`).join('')});
 
@@ -275,25 +284,29 @@ if(state.group==='path'&&!STATIONS.length)state.group='file';
 document.getElementById('group').value=state.group;
 
 // table
-const colLabel={file:'File',function:'Function',shape:'Shape',change_type:'Change',logical:'Logical',what:'What changed',why:'Why it matters',verdict:'Verdict',severity:'Severity',impact:'Impact',lines:'Lines'};
+const colLabel={change:'Change',status:'Status',file:'File',function:'Function',shape:'Shape',change_type:'Change',logical:'Logical',what:'What changed',why:'Why it matters',verdict:'Verdict',severity:'Severity',impact:'Impact',lines:'Lines'};
 const maxRow=Math.max(1,...rows.filter(r=>!r.file.endsWith('/')).map(r=>(r.additions||0)+(r.deletions||0)));
 function shape(r){const a=r.additions||0,d=r.deletions||0,n=a+d;if(!n)return'';const w=Math.min(40,Math.round(6+30*Math.sqrt(n/maxRow)));return`<span class="bar" style="width:${w}px" title="+${a} −${d}"><i style="width:${Math.round(a/n*100)}%"></i></span>+${a} −${d}${r.tests?'<span class="tick" title="a test changed with it">✓</span>':''}`}
 function cell(r,c){const nf=(rowFindings[r.id]||[]).length;switch(c){
  case'file':return`<td class="file" title="${esc(r.file)}">${link(r.file_link,leaf(r.file))}</td>`;
- case'function':return`<td class="function" title="${esc(r.function||'')}"><span class="caret">▸</span>${link(r.line_link,r.function||'—')}${nf?`<span class="badge" title="${nf} finding${nf===1?'':'s'} attached">${nf}</span>`:''}</td>`;
+ case'function':return`<td class="function" title="${esc(r.file+' · '+(r.function||''))}">${!columns.includes('file')&&state.group!=='file'?`<span class="fp">${esc(leaf(r.file))}</span>`:''}<span class="caret">▸</span>${link(r.line_link,r.function||'—')}${nf?`<span class="badge" title="${nf} finding${nf===1?'':'s'} attached">${nf}</span>`:''}</td>`;
+ case'change':return`<td><span class="chip chg ${esc(r.logical)}" title="${esc(r.logical)}: ${r.logical==='green'?'no behaviour change':r.logical==='amber'?'intended behaviour change':'high blast radius or risky path'}">${esc(r.change_type||r.logical)}</span></td>`;
+ case'status':return`<td>${isFine(r)?'':`<span class="chip v ${esc(r.verdict)}" title="verdict · severity">${esc(r.verdict)}${r.severity!==sevScale[0]?` · ${esc(r.severity)}`:''}</span>`}</td>`;
  case'shape':return`<td class="shape">${shape(r)}</td>`;
  case'change_type':return`<td><span class="chip ct">${esc(r.change_type||'')}</span></td>`;
  case'logical':return`<td><span class="chip ${esc(r.logical)}">${esc(r.logical)}</span></td>`;
- case'what':return`<td class="what">${md(r.what||'')}</td>`;
+ case'what':return`<td class="what"><span class="w">${whatHtml(r)}</span></td>`;
  case'why':return`<td class="what">${md(r.why||'')}</td>`;
  case'verdict':return`<td><span class="chip v ${esc(r.verdict)}">${esc(r.verdict||'')}</span></td>`;
  case'severity':return`<td><span class="chip sev ${esc(r.severity)}">${esc(r.severity||'')}</span></td>`;
  case'impact':return`<td>${esc(r.impact||'')}</td>`;
  case'lines':return`<td class="mono">${r.line_start?esc(r.line_start)+(r.line_end&&r.line_end!==r.line_start?'–'+esc(r.line_end):''):''}</td>`;
  default:return`<td>${esc(r[c]==null?'':r[c])}</td>`}}
+function isFine(r){return r.verdict===(cfg.verdicts||['lgtm'])[0]&&sevRank(r.severity)===0&&!(rowFindings[r.id]||[]).length}
+function whatHtml(r){const d=r.delta;if(d&&d.after)return`<span class="delta">${d.before?`<span class="b">${md(d.before)}</span><span class="ar">→</span>`:''}${md(d.after)}</span>`;return md(r.what||'')}
 function diffHtml(r){if(!r.diff_snippet)return'';const multi=r.diff_snippet.includes('\n⋯\n');let n=r.line_start||0;return`<pre class="diff">${r.diff_snippet.split('\n').map(l=>{if(l==='⋯')return`<span class="sep">⋯</span>`;const t=l[0]==='+'?'add':l[0]==='-'?'del':'';const num=(!multi&&n&&t!=='del')?n++:'';return`<span class="l ${t}"><b>${num}</b><i>${t==='add'?'+':t==='del'?'−':''}</i>${esc(l.slice(1))}</span>`}).join('')}</pre>`}
-function decBtns(f){const d=decisions[f.id]||{};return`<span class="dec" data-f="${f.id}">${[['agree','Agree','This is a real issue'],['dismiss','Not an issue','Reviewed, not a problem'],['fixed','Fixed','Already addressed']].map(([s,l,t])=>`<button type="button" data-s="${s}" aria-pressed="${d.state===s}" title="${t}">${l}</button>`).join('')}</span>`}
-function detail(r){const dl=[['Why it matters',r.why],['Notes',r.notes],['Suggestion',r.suggestion],['Impact',r.impact]].filter(x=>x[1]).map(x=>`<dt>${esc(x[0])}</dt><dd>${md(x[1])}</dd>`).join('');
+function decBtns(f){const d=decisions[f.id]||{};return`<span class="dec" data-f="${f.id}">${[['agree','Agree','This is a real issue'],['dismiss','Dismiss','Reviewed: not an issue'],['fixed','Fixed','Already addressed']].map(([s,l,t])=>`<button type="button" data-s="${s}" aria-pressed="${d.state===s}" title="${t}">${l}</button>`).join('')}</span>`}
+function detail(r){const dl=[[r.delta?'Summary':'',r.delta?r.what:''],['Why it matters',r.why],['Notes',r.notes],['Suggestion',r.suggestion],['Impact',r.impact]].filter(x=>x[1]).map(x=>`<dt>${esc(x[0])}</dt><dd>${md(x[1])}</dd>`).join('');
  const att=(rowFindings[r.id]||[]).slice().sort((a,b)=>sevRank(b.severity)-sevRank(a.severity)).map(f=>`<li><span class="chip sev ${esc(f.severity)}">${esc(f.severity)}</span><span><b>${md(f.title)}</b>${f.line?` <span class="mono">${link(f.link,':'+f.line)}</span>`:''}${srcChips(f)}</span>${decBtns(f)}<div class="body">${f.detail?`<div class="dt">${md(f.detail)}</div>`:''}${f.suggestion?`<div class="sg">Suggestion: ${md(f.suggestion)}</div>`:''}</div></li>`).join('');
  const links=[r.line_link?link(r.line_link,'Open at line '+(r.line_start||'')):'',r.review_link?link(r.review_link,'Open in review'):''].filter(Boolean).join('');
  return`<div class="detail">${att?`<ol class="attached">${att}</ol>`:''}${dl?`<dl class="grid">${dl}</dl>`:''}${diffHtml(r)}${links?`<div class="links">${links}</div>`:''}</div>`}
@@ -305,10 +318,17 @@ function groupHeader(k,rs,cols){const worst=rs.reduce((a,r)=>ragRank[r.logical]<
  if(state.group==='path'){const s=STATIONS.find(x=>String(x.n)===k)||{name:'Other',n:+k};const done=rs.filter(isRv).length;const total=stationRows(s.n).length;return`<tr class="group" id="st-${s.n}"><td colspan="${cols.length+1}"><span class="prog">${done}/${total} reviewed${s.minutes?' · '+mins(s.minutes):''}</span>${STN[s.n]||''} ${esc(s.name)}<span class="sub">${rs.length} row${rs.length===1?'':'s'}</span>${s.hint?`<span class="hint">${esc(s.hint)}</span>`:''}</td></tr>`}
  const label=state.group==='file'?`<span id="file-${esc(encodeURIComponent(k))}" class="path">${link(rs[0].file_link,k)}</span>`:`<span class="chip ${state.group==='logical'?esc(k):state.group==='severity'?'sev '+esc(k):'ct'}">${esc(k)}</span>`;
  return`<tr class="group"><td colspan="${cols.length+1}"><span class="dot ${worst}"></span>&nbsp; ${label}<span class="sub">${rs.length} change${rs.length===1?'':'s'}</span></td></tr>`}
-function render(){const vis=visible();const cols=activeCols();document.querySelector('#table thead').innerHTML=`<tr><th></th>${cols.map(c=>`<th>${esc(colLabel[c]||c)}</th>`).join('')}</tr>`;const groups=new Map();sorted(vis).forEach(r=>{const k=groupKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)});
+const unfold=new Set();
+function layout(){const vis=visible();const groups=new Map();sorted(vis).forEach(r=>{const k=groupKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)});
  let keys=[...groups.keys()];if(state.group==='file')keys.sort();else if(state.group==='path')keys.sort((a,b)=>+a-+b);else if(state.group==='severity')keys.sort((a,b)=>sevRank(b)-sevRank(a));else if(state.group==='logical')keys.sort((a,b)=>ragRank[a]-ragRank[b]);
- const html=[];keys.forEach(k=>{const rs=groups.get(k);if(state.group!=='none')html.push(groupHeader(k,rs,cols));
-  rs.forEach(r=>{html.push(`<tr class="row${state.active===r._i?' active':''}${isRv(r)?' rv':''}" data-i="${r._i}" tabindex="0" aria-expanded="${state.open.has(r._i)}"><td class="rv"><input type="checkbox" aria-label="Reviewed" ${isRv(r)?'checked':''}></td>${cols.map(c=>cell(r,c)).join('')}</tr>`);if(state.open.has(r._i))html.push(`<tr class="detail"><td colspan="${cols.length+1}">${detail(r)}</td></tr>`)})});
+ // quiet rows (fine, nothing attached) fold into one line per group, unless the reader is searching or filtering
+ const canFold=!state.q&&!state.sev&&!state.src&&!state.fonly&&!state.rag.size&&!state.path&&state.group!=='file';
+ return{vis,groups:keys.map(k=>{const rs=groups.get(k);const quiet=canFold&&!unfold.has(k)?rs.filter(r=>isFine(r)&&!state.open.has(r._i)):[];const shown=quiet.length>=2?rs.filter(r=>!quiet.includes(r)):rs;return{k,rs,shown,quiet:quiet.length>=2?quiet:[]}})}}
+function quietLine(g,cols){const names=[...new Set(g.quiet.map(r=>r.file.endsWith('/')?r.file:r.function&&r.function!=='top-level'?r.function.split(' / ')[0]:leaf(r.file)))];const shownNames=names.slice(0,6).join(', ')+(names.length>6?` +${names.length-6}`:'');
+ return`<tr class="quiet" data-k="${esc(g.k)}"><td></td><td colspan="${cols.length}"><span class="caret">▸</span>${g.quiet.length} row${g.quiet.length===1?'':'s'} judged fine: <span class="names">${esc(shownNames)}</span></td></tr>`}
+function render(){const L=layout();const vis=L.vis;const cols=activeCols();document.querySelector('#table thead').innerHTML=`<tr><th></th>${cols.map(c=>`<th>${esc(colLabel[c]||c)}</th>`).join('')}</tr>`;
+ const html=[];L.groups.forEach(g=>{const k=g.k,rs=g.rs;if(state.group!=='none')html.push(groupHeader(k,rs,cols));
+  g.shown.forEach(r=>{html.push(`<tr class="row${state.active===r._i?' active':''}${isRv(r)?' rv':''}" data-i="${r._i}" tabindex="0" aria-expanded="${state.open.has(r._i)}"><td class="rv"><input type="checkbox" aria-label="Reviewed" ${isRv(r)?'checked':''}></td>${cols.map(c=>cell(r,c)).join('')}</tr>`);if(state.open.has(r._i))html.push(`<tr class="detail"><td colspan="${cols.length+1}">${detail(r)}</td></tr>`)});if(g.quiet.length)html.push(quietLine(g,cols))});
  document.querySelector('#table tbody').innerHTML=html.join('')||`<tr><td colspan="${cols.length+1}" class="empty">No changes match the current filters.</td></tr>`;
  document.getElementById('count').textContent=`${vis.length} of ${rows.length}`;
  const rvn=rows.filter(isRv).length,dn=F.filter(f=>decisions[f.id]&&decisions[f.id].state).length;
@@ -329,9 +349,9 @@ function toggleRv(r){if(isRv(r))delete reviewed[rvKey(r)];else reviewed[rvKey(r)
 function decide(fid,s){const cur=decisions[fid]||{};decisions[fid]=cur.state===s?{}:{state:s};store.set('decisions',decisions);render()}
 document.addEventListener('click',e=>{const d=e.target.closest('.dec button');if(d){e.stopPropagation();decide(d.parentElement.dataset.f,d.dataset.s)}});
 function toMarkdown(){const vis=sorted(visible());const e={green:'🟢',amber:'🟡',red:'🔴'};const out=[`**pr-ism review — ${ovLabel}**`,'',S.one_liner||'',''];
- (S.narrative||[]).forEach(p=>out.push(p,''));const cols=activeCols().filter(c=>!['lines'].includes(c));const head={file:'File',function:'Function',shape:'+/−',change_type:'Change',logical:'Logical',what:'What changed',why:'Why',verdict:'Verdict',severity:'Severity',impact:'Impact'};
+ (S.narrative||[]).forEach(p=>out.push(p,''));const cols=activeCols().filter(c=>!['lines'].includes(c));const head={change:'Change',status:'Status',file:'File',function:'Function',shape:'+/−',change_type:'Change',logical:'Logical',what:'What changed',why:'Why',verdict:'Verdict',severity:'Severity',impact:'Impact'};
  out.push('| '+cols.map(c=>head[c]||c).join(' | ')+' |','|'+cols.map(()=>'---').join('|')+'|');
- vis.forEach(r=>out.push('| '+cols.map(c=>{const v=c==='file'?(r.file_link?`[${r.file}](${r.file_link})`:r.file):c==='function'?(r.line_link?`[${r.function||'—'}](${r.line_link})`:(r.function||'—')):c==='logical'?`${e[r.logical]} ${r.logical}`:c==='shape'?`+${r.additions||0} −${r.deletions||0}`:String(r[c]||'');return v.replace(/\|/g,'\\|').replace(/\n/g,' ')}).join(' | ')+' |'));
+ vis.forEach(r=>out.push('| '+cols.map(c=>{const v=c==='file'?(r.file_link?`[${r.file}](${r.file_link})`:r.file):c==='function'?(r.line_link?`[${r.function||'—'}](${r.line_link})`:(r.function||'—')):c==='logical'?`${e[r.logical]} ${r.logical}`:c==='shape'?`+${r.additions||0} −${r.deletions||0}`:c==='change'?`${e[r.logical]} ${r.change_type||''}`:c==='status'?(isFine(r)?'':`${r.verdict} · ${r.severity}`):c==='what'&&r.delta&&r.delta.after?(r.delta.before?`${r.delta.before} → ${r.delta.after}`:r.delta.after):String(r[c]||'');return v.replace(/\|/g,'\\|').replace(/\n/g,' ')}).join(' | ')+' |'));
  const fs=F.filter(f=>!(decisions[f.id]&&decisions[f.id].state==='dismiss'));
  if(fs.length){out.push('','**Findings**');fs.forEach(f=>out.push(`- **${f.severity}** — ${f.title}${f.file?` (\`${f.file}${f.line?':'+f.line:''}\`)`:''}${multiSrc?' · _'+srcsOf(f).map(short).join(', ')+'_':''}${decisions[f.id]&&decisions[f.id].state==='fixed'?' · _fixed_':''}${f.detail?': '+f.detail:''}${f.suggestion?` _Suggestion: ${f.suggestion}_`:''}`))}
  if(G.length){out.push('','**Test gaps**');G.forEach(g=>out.push(`- \`${g.file}\`${g.function?' · '+g.function:''} — ${g.reason}`))}
@@ -341,11 +361,11 @@ async function copy(text,btn,label){try{await navigator.clipboard.writeText(text
 document.getElementById('copy-md').addEventListener('click',e=>copy(toMarkdown(),e.currentTarget,'Copy'));
 document.getElementById('copy-dec').addEventListener('click',e=>copy(JSON.stringify({head_sha:m.head_sha||null,reviewed:rows.filter(isRv).map(r=>r.id),decisions:Object.fromEntries(Object.entries(decisions).filter(([k,v])=>v&&v.state))},null,1),e.currentTarget,'Copy decisions'));
 const worstBtn=document.getElementById('worst');if(worstBtn)worstBtn.addEventListener('click',()=>{const rid=(worstF.row_ids||[])[0];const r=rid&&rowById[rid];if(r){state.open.add(r._i);state.active=r._i;render();const el=document.querySelector(`tr.row[data-i="${r._i}"]`);el&&el.scrollIntoView({block:'center'})}else document.getElementById('sec-findings').scrollIntoView({block:'start'})});
-document.getElementById('expand-all').addEventListener('click',()=>{const vis=visible();if(state.open.size>=vis.length&&vis.length)state.open.clear();else vis.forEach(r=>state.open.add(r._i));render()});
-document.querySelector('#table tbody').addEventListener('click',e=>{if(e.target.closest('a')||e.target.closest('.dec'))return;const tr=e.target.closest('tr.row');if(!tr)return;const i=+tr.dataset.i;if(e.target.closest('td.rv')){toggleRv(rows[i]);return}state.open.has(i)?state.open.delete(i):state.open.add(i);state.active=i;render()});
+document.getElementById('expand-all').addEventListener('click',()=>{const vis=visible();if(state.open.size>=vis.length&&vis.length){state.open.clear();unfold.clear()}else{vis.forEach(r=>state.open.add(r._i));layout().groups.forEach(g=>unfold.add(g.k))}render()});
+document.querySelector('#table tbody').addEventListener('click',e=>{const qt=e.target.closest('tr.quiet');if(qt){unfold.add(qt.dataset.k);render();return}if(e.target.closest('a')||e.target.closest('.dec'))return;const tr=e.target.closest('tr.row');if(!tr)return;const i=+tr.dataset.i;if(e.target.closest('td.rv')){toggleRv(rows[i]);return}state.open.has(i)?state.open.delete(i):state.open.add(i);state.active=i;render()});
 function focusRow(i){state.active=i;render();const el=document.querySelector(`tr.row[data-i="${i}"]`);el&&el.scrollIntoView({block:'nearest'});el&&el.focus()}
 document.addEventListener('keydown',e=>{const tag=(e.target.tagName||'').toLowerCase();if(tag==='input'||tag==='select'||tag==='textarea'){if(e.key==='Escape')e.target.blur();return}if(e.metaKey||e.ctrlKey||e.altKey)return;
- const vis=sorted(visible());const order=[];const groups=new Map();vis.forEach(r=>{const k=groupKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)});let keys=[...groups.keys()];if(state.group==='file')keys.sort();else if(state.group==='path')keys.sort((a,b)=>+a-+b);else if(state.group==='severity')keys.sort((a,b)=>sevRank(b)-sevRank(a));else if(state.group==='logical')keys.sort((a,b)=>ragRank[a]-ragRank[b]);keys.forEach(k=>groups.get(k).forEach(r=>order.push(r)));
+ const order=layout().groups.flatMap(g=>g.shown);
  const idx=order.findIndex(r=>r._i===state.active);const cur=order[idx];
  if(e.key==='j'||e.key==='k'){e.preventDefault();const n=e.key==='j'?Math.min(idx+1,order.length-1):Math.max(idx-1,0);if(order[n])focusRow(order[n]._i)}
  else if(e.key==='Enter'&&cur){e.preventDefault();state.open.has(cur._i)?state.open.delete(cur._i):state.open.add(cur._i);render()}

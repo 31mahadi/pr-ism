@@ -16,14 +16,11 @@
       "questions"
     ],
     "columns": [
-      "file",
       "function",
       "shape",
-      "change_type",
-      "logical",
+      "change",
       "what",
-      "verdict",
-      "severity"
+      "status"
     ],
     "group_by": "path",
     "sort": "severity_desc",

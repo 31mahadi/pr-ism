@@ -111,6 +111,16 @@ green row can be load-bearing. Omit when nothing stands out (a flat set of indep
 ## Writing the cells
 
 - `what`: one concrete sentence, before → after. "Retries now cap at 3 (was unbounded) and back off 200ms" beats "improved retry logic".
+- `summary.narrative`: at most two short paragraphs — what the PR is for, and what needs
+  attention. Do not restate rows; the table already lists every change.
+- `what`: the behaviour change in at most ~80 characters, as a reviewer would say it out loud.
+  Lead with the effect, not the mechanics: "SSO sessions checked against the account's provider",
+  not "issue() now branches on SSO sessions (must match…) vs password sessions (aal2…)". Put the
+  mechanics in `notes`. The renderer warns above 100 characters.
+- `delta` (optional, for behaviour changes): `{"before": "password sessions only", "after":
+  "SSO sessions must match the account's provider"}`. Each side under ~60 characters. The report
+  shows it as before → after in place of `what`. Omit for new code (`added`) and pure refactors;
+  write `what` as `new: …` for added code.
 - `why`: the consequence for a reader who has not seen the diff: who is affected, what could break, what to double-check. Leave it out on `lgtm`/`info` rows rather than writing filler.
 - `notes`: evidence — the line, the caller, the assumption. Quote identifiers, not whole hunks.
 - `suggestion`: an actionable fix or a specific test to add. Skip it if there is nothing to suggest.

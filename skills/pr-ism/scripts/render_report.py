@@ -98,6 +98,9 @@ def validate(review: dict, cfg: dict) -> list[str]:
             errs.append(f"{where}: severity '{r['severity']}' not in configured scale {cfg['severity_scale']}")
         if r.get("change_type") and r["change_type"] not in CHANGE_TYPES:
             errs.append(f"{where}: change_type '{r['change_type']}' not in {sorted(CHANGE_TYPES)}")
+        d = r.get("delta")
+        if d is not None and not (isinstance(d, dict) and isinstance(d.get("after"), str) and d["after"]):
+            errs.append(f"{where}: delta must be {{'before': str, 'after': str}}")
         if r.get("impact") and r["impact"] not in IMPACTS:
             errs.append(f"{where}: impact '{r['impact']}' not in {sorted(IMPACTS)}")
     for i, f in enumerate(review.get("findings") or []):
@@ -336,6 +339,17 @@ def warnings(review: dict, cfg: dict) -> list[str]:
     """Contradictions worth a second look; they do not block rendering."""
     scale, out = cfg["severity_scale"], []
     mid = scale[len(scale) // 2] if scale else None
+    long_what = [
+        f"rows[{i}] ({r.get('file', '').split('/')[-1]}::{r.get('function')})"
+        for i, r in enumerate(review.get("rows") or [])
+        if len(r.get("what") or "") > 100
+    ]
+    if long_what:
+        out.append(
+            f"{len(long_what)} row(s) have `what` over 100 characters: {', '.join(long_what[:5])}"
+            + (" …" if len(long_what) > 5 else "")
+            + ". State the effect in ~80 characters and move the mechanics to notes"
+        )
     for i, r in enumerate(review.get("rows") or []):
         if (
             mid
@@ -382,6 +396,8 @@ def to_markdown(review: dict, cfg: dict) -> str:
         "impact": "Impact",
         "lines": "Lines",
         "shape": "+/−",
+        "change": "Change",
+        "status": "Status",
     }
     out += [
         "## Changes by function",
@@ -402,6 +418,16 @@ def to_markdown(review: dict, cfg: dict) -> str:
                 cells.append(f"{emoji[r['logical']]} {r['logical']}")
             elif c == "shape":
                 cells.append(f"+{r.get('additions') or 0} −{r.get('deletions') or 0}")
+            elif c == "change":
+                cells.append(f"{emoji[r['logical']]} {r.get('change_type', '')}")
+            elif c == "status":
+                fine = r["verdict"] == cfg["verdicts"][0] and r["severity"] == cfg["severity_scale"][0]
+                cells.append("" if fine else f"{r['verdict']} · {r['severity']}")
+            elif c == "what" and r.get("delta"):
+                d = r["delta"]
+                cells.append(
+                    (f"{d.get('before')} → {d['after']}" if d.get("before") else d["after"]).replace("|", "\\|")
+                )
             elif c == "lines":
                 cells.append(
                     f"{r.get('line_start', '')}{'–' + str(r['line_end']) if r.get('line_end') and r.get('line_end') != r.get('line_start') else ''}"

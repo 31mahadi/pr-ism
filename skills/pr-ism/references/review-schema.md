@@ -13,7 +13,7 @@ Fields marked ● are required.
   "summary": {
     "overall_verdict": "request-changes",       // ● approve | approve-with-nits | comment | request-changes
     "one_liner": "Bounds webhook retries and adds idempotency, but the new cap can drop legitimate retries during provider outages.",  // ●
-    "narrative": [                              // 1–4 short paragraphs, plain prose
+    "narrative": [                              // at most 2 short paragraphs; do not restate rows
       "The PR replaces the unbounded retry loop in `handleWebhook` with a 3-attempt exponential backoff and stores an idempotency key per event.",
       "Two things need attention before merge: the cap is not configurable and there is no dead-letter path, and the new `webhook_events` migration is not reversible."
     ],
@@ -40,7 +40,8 @@ Fields marked ● are required.
       "line_end": 88,
       "change_type": "behavior-change",          // ● see rubric
       "logical": "red",                          // ● green | amber | red
-      "what": "Retries are now capped at 3 with 200ms→1.6s backoff (was: loop until success).",   // ●
+      "what": "Retries capped at 3 with backoff",                           // ● ≤ ~80 chars, the effect not the mechanics
+      "delta": {"before": "retries until success", "after": "3 attempts, 200ms→1.6s backoff"},  // optional; shown as before → after
       "why": "Payment confirmations arriving during a >2s provider blip will be dropped after the 3rd attempt with no dead-letter record.",
       "verdict": "needs-changes",                // ● from configured verdicts
       "severity": "high",                        // ● from configured severity_scale

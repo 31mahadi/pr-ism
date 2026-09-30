@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0 — 2026-09-30
+- Compact, change-focused table. Default columns are now function, shape, change, what, status: `change` is the change type tinted by its green/amber/red rating, `status` merges verdict and severity and is blank when a row is fine, and the file name sits as a dim prefix on the function. On a 37-row review the table is about a third of its former height.
+- Rows judged fine (first verdict, lowest severity, nothing attached) fold into one line per station, listing their names; click to open. Folding pauses while you search or filter.
+- `what` describes the effect in ~80 characters; the renderer warns above 100. Optional row `delta: {before, after}` renders as before → after. The rubric caps the summary narrative at two paragraphs.
+- Risk overview drops the red-paths chip (the review path already groups them) and hides when nothing else is left. Finding decisions read Agree / Dismiss / Fixed.
+- Old reviews render unchanged in content: long `what` text is clamped to two lines and shown in full when the row is expanded. The previous columns (`file`, `change_type`, `logical`, `verdict`, `severity`) remain available.
 ## 1.7.1 — 2026-09-29
 - README: the review path, decide step, chat follow-up modes (`walk`, `show`, `fix`, `post`) and time estimates.
 - One-command releases: `python3 scripts/release.py patch|minor|major|X.Y.Z [--push]` checks the repo, bumps all three versions, runs lint and tests, then commits, tags and pushes.
