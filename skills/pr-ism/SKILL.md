@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs python3 (3.9+) and git. GitHub PRs use the gh CLI, else the REST API (GITHUB_TOKEN for private), else a git fetch of refs/pull/N/head from inside the clone; GitLab MRs use glab or refs/merge-requests/N/head. Other providers work via a local branch, commit range or patch file. The HTML report is self-contained and works offline. In Claude Code, optionally uses the pr-review-toolkit plugin's agents for detection (review.engine).
 metadata:
   author: Mahadi Hassan <01.mahadi@gmail.com>
-  version: "1.7.1"
+  version: "1.8.0"
 ---
 
 # pr-ism
